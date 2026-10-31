@@ -60,6 +60,11 @@ def recovery_clock(log, change_id, now, tolerance_minutes):
     return f"{minutes} min {seconds} s after {change_id}: {verdict} the {tolerance_minutes} min tolerance"
 
 
+def restore_id(change_id):
+    """The log's name for the restore of a change, which is what stops its clock."""
+    return f"RESTORE-{change_id}"
+
+
 def applied_at(log, change_id):
     """When the change was last logged as applied, or None."""
     applied = [entry.get("applied_at") for entry in log.get("changes", []) if entry.get("change_id") == change_id]
@@ -67,12 +72,17 @@ def applied_at(log, change_id):
 
 
 def seconds_since(log, change_id, now):
-    """Whole seconds from the change's logged time to now, or None without a usable entry."""
+    """Whole seconds from the change's logged time to its restore, or to now if it is still live. None without a
+    usable entry. A restore from before the latest fault belongs to an earlier run, so it does not stop this one."""
     try:
-        elapsed = datetime.datetime.fromisoformat(now) - datetime.datetime.fromisoformat(applied_at(log, change_id))
+        started = datetime.datetime.fromisoformat(applied_at(log, change_id))
+        ended = datetime.datetime.fromisoformat(now)
+        restored = applied_at(log, restore_id(change_id))
+        if restored and datetime.datetime.fromisoformat(restored) >= started:
+            ended = datetime.datetime.fromisoformat(restored)
     except (TypeError, ValueError):
         return None
-    return int(elapsed.total_seconds())
+    return int((ended - started).total_seconds())
 
 
 def faulted_version_ids(versions, stall_id, scenario):

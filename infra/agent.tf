@@ -48,7 +48,7 @@ resource "aws_iam_role" "tools" {
 }
 
 # Read menus, their versions, and the maintenance log. No Put, Delete, versioning or lifecycle:
-# those are what `./kopi deny` proves are denied. ListBucket is here only so a missing key
+# those are what `./kopi safe` proves are denied. ListBucket is here only so a missing key
 # answers 404 (reported as MISSING) instead of 403; it reveals key names, never contents.
 resource "aws_iam_role_policy" "tools_read" {
   role = aws_iam_role.tools.id

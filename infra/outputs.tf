@@ -13,6 +13,14 @@ output "investigator_harness_arn" {
   sensitive = true
 }
 output "tools_function" { value = aws_lambda_function.tools.function_name }
+output "tools_function_arn" {
+  value     = aws_lambda_function.tools.arn
+  sensitive = true
+}
+output "gateway_role_arn" {
+  value     = aws_iam_role.gateway.arn
+  sensitive = true
+}
 output "tools_role_arn" {
   value     = aws_iam_role.tools.arn
   sensitive = true

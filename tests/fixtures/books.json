@@ -1,17 +1,53 @@
 {
   "name": "books",
   "title": "Corner Books",
-  "currency": { "code": "USD", "symbol": "$", "thousands": ",", "decimal": ".", "decimals": 2 },
+  "currency": {
+    "code": "USD",
+    "symbol": "$",
+    "thousands": ",",
+    "decimal": ".",
+    "decimals": 2
+  },
   "impact_tolerance_minutes": 30,
   "stalls": {
-    "fiction": { "title": "Fiction", "items": [{ "id": "novel", "name": "Novel", "price": 1500 }] },
-    "travel": { "title": "Travel", "items": [{ "id": "atlas", "name": "Atlas", "price": 4000 }] }
+    "fiction": {
+      "title": "Fiction",
+      "items": [
+        {
+          "id": "novel",
+          "name": "Novel",
+          "price": 1500
+        }
+      ]
+    },
+    "travel": {
+      "title": "Travel",
+      "items": [
+        {
+          "id": "atlas",
+          "name": "Atlas",
+          "price": 4000
+        }
+      ]
+    },
+    "music": {
+      "title": "Music",
+      "items": [
+        {
+          "id": "vinyl",
+          "name": "Vinyl",
+          "price": 2500
+        }
+      ]
+    }
   },
   "fault": {
     "change_id": "PRICE-9",
     "title": "Bulk price import",
     "stall": "fiction",
-    "items": ["novel"],
+    "items": [
+      "novel"
+    ],
     "factor": 10
   },
   "promo": {

@@ -19,7 +19,8 @@ class MenuStore:
 
     def read_menus(self, scenario):
         """key -> menu for every stall in the scenario; None where the object is missing."""
-        return {menu.menu_key(stall_id): self._read_json(menu.menu_key(stall_id)) for stall_id in scenario["stalls"]}
+        keys = [menu.menu_key(stall_id) for stall_id in scenario["stalls"]]
+        return {key: _as_menu(self._read_json(key)) for key in keys}
 
     def current_versions(self, scenario):
         """key -> current S3 version ID for every menu and the log; None if missing. Read before and after a
@@ -51,7 +52,9 @@ class MenuStore:
                 "last_modified": v["LastModified"].strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "menu": None
                 if v["deleted"]
-                else _parsed(self.s3.get_object(Bucket=self.bucket, Key=key, VersionId=v["VersionId"])["Body"].read()),
+                else _as_menu(
+                    _parsed(self.s3.get_object(Bucket=self.bucket, Key=key, VersionId=v["VersionId"])["Body"].read())
+                ),
             }
             for v in entries[:count]
         ]
@@ -83,6 +86,12 @@ class MenuStore:
                 return None
             raise
         return _parsed(body)
+
+
+def _as_menu(value):
+    """The value if it has a menu's shape, or None: the state check reads every menu, so anything else counts as
+    missing and reads as BROKEN instead of crashing the check that ./kopi reset depends on."""
+    return value if isinstance(value, dict) and isinstance(value.get("items"), list) else None
 
 
 def _parsed(body):

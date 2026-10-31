@@ -43,6 +43,14 @@ class ScenarioValidation(unittest.TestCase):
         with self.assertRaisesRegex(menu.ScenarioError, "promo.stall"):
             menu.load_scenario(raw)
 
+    def test_promo_needs_every_field_the_journey_prints(self):
+        for field in ("change_id", "title", "label"):
+            with self.subTest(field=field):
+                raw = raw_scenario()
+                del raw["promo"][field]
+                with self.assertRaisesRegex(menu.ScenarioError, f"promo.{field}"):
+                    menu.load_scenario(raw)
+
     def test_price_must_be_positive_integer(self):
         raw = raw_scenario()
         raw["stalls"]["kopi"]["items"][0]["price"] = 25000.5

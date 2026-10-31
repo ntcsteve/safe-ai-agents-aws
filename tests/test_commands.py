@@ -20,6 +20,8 @@ OUTPUTS = {
     "bucket": "kopi-test",
     "region": "ap-southeast-2",
     "tools_role_arn": "arn:aws:iam::000000000000:role/kopi-tools",
+    "gateway_role_arn": "arn:aws:iam::000000000000:role/kopi-gateway",
+    "tools_function_arn": "arn:aws:lambda:ap-southeast-2:000000000000:function:kopi-tools",
     "investigator_role_arn": "arn:aws:iam::000000000000:role/kopi-investigator",
     "gateway_arn": "arn:aws:bedrock-agentcore:ap-southeast-2:000000000000:gateway/kopi",
     "investigator_harness_arn": "arn:aws:bedrock-agentcore:ap-southeast-2:000000000000:harness/kopi",
@@ -92,6 +94,13 @@ def quietly(call, *args):
     return result, out.getvalue()
 
 
+ALLOWED_CONTROLS = {
+    ("kopi-tools", "s3:GetObject"),
+    ("kopi-gateway", "lambda:InvokeFunction"),
+    ("kopi-investigator", "bedrock-agentcore:InvokeGateway"),
+}
+
+
 def fake_iam(allowing):
     """An IAM client whose simulator allows exactly the (role name, action) pairs named."""
 
@@ -103,7 +112,7 @@ def fake_iam(allowing):
 
 
 class Safe(unittest.TestCase):
-    CONTROLS = {("kopi-tools", "s3:GetObject"), ("kopi-investigator", "bedrock-agentcore:InvokeGateway")}
+    CONTROLS = ALLOWED_CONTROLS
 
     def safe(self, allowing):
         with mock.patch.object(commands.boto3, "client", return_value=fake_iam(allowing)):
@@ -119,6 +128,11 @@ class Safe(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertIn("BOUNDARY BROKEN", printed)
 
+    def test_a_write_on_the_gateway_role_breaks_the_boundary(self):
+        result, printed = self.safe(self.CONTROLS | {("kopi-gateway", "s3:PutObject")})
+        self.assertEqual(result, 1)
+        self.assertIn("kopi-gateway", printed)
+
     def test_the_investigator_reading_data_directly_breaks_the_boundary(self):
         result, _ = self.safe(self.CONTROLS | {("kopi-investigator", "s3:GetObject")})
         self.assertEqual(result, 1)
@@ -130,12 +144,11 @@ class Safe(unittest.TestCase):
 
 
 class Up(unittest.TestCase):
-    def up(self, before=states.State.NOT_DEPLOYED, **check):
+    def up(self, **check):
         check = check or {"return_value": "account ********3333, region ap-southeast-2"}
         with (
             mock.patch.object(KOPI.preflight, "check", **check),
             mock.patch.object(KOPI, "_terraform") as terraform,
-            mock.patch.object(KOPI.Demo, "state", return_value=before),
             mock.patch.object(KOPI.Demo, "forget_deployed"),  # the fakes stand in for what up would re-read
         ):
             demo = make_demo(broken=True)
@@ -146,25 +159,28 @@ class Up(unittest.TestCase):
         _, printed, terraform, demo = self.up()
         self.assertIn("Target: account ********3333, region ap-southeast-2", printed)
         self.assertEqual([call.args[0] for call in terraform.call_args_list], ["init", "apply"])
-        self.assertIn("HEALTHY", printed)
         self.assertIn("Next: ./kopi safe", printed)
         self.assertEqual([entry["change_id"] for entry in demo.store.log["changes"]], ["PROMO-7"])
 
-    def test_a_changed_config_reseeds(self):
-        _, printed, _, _ = self.up(before=states.State.CONFIG_NOT_APPLIED)
-        self.assertIn("RESET", printed)
-
-    def test_rerunning_mid_run_leaves_a_broken_menu_broken(self):
-        _, printed, _, demo = self.up(before=states.State.BROKEN)
-        self.assertNotIn("RESET", printed)
-        self.assertIn("BROKEN", printed)
-        self.assertEqual(demo.store.log["changes"], [])
+    def test_it_always_ends_with_good_menus_whatever_state_it_found(self):
+        """One rule, so a crash between apply and seeding is fixed by running up again."""
+        _, printed, _, _ = self.up()
+        self.assertIn("HEALTHY", printed)
+        self.assertNotIn("BROKEN", printed)
 
     def test_a_failed_preflight_creates_nothing(self):
         refusal = KOPI.preflight.PreflightFailed("no working AWS credentials")
         result, _, terraform, _ = self.up(side_effect=refusal)
         self.assertIs(result, refusal)
         terraform.assert_not_called()
+
+
+class Scenario(unittest.TestCase):
+    def test_a_file_that_is_not_json_is_named_with_its_fix(self):
+        with mock.patch.object(pathlib.Path, "read_text", return_value="{ broken"):
+            result, _ = quietly(KOPI._load_scenario, "kopi")
+        self.assertIsInstance(result, menu.ScenarioError)
+        self.assertIn("Next: fix scenario/kopi.json", str(result))
 
 
 class Status(unittest.TestCase):
@@ -229,14 +245,13 @@ class Journey(unittest.TestCase):
         demo = KOPI.Demo(SETTINGS, KOPI._load_scenario("kopi"))
         self.deployed = {**OUTPUTS, **demo.file_hashes()}
         self.store = VersionedStore(demo.scenario)
-        allowed = {("kopi-tools", "s3:GetObject"), ("kopi-investigator", "bedrock-agentcore:InvokeGateway")}
         run = Observe().run_of()
         for patch in (
             mock.patch.object(KOPI, "read_deployed", side_effect=lambda: self.deployed),
             mock.patch.object(KOPI, "MenuStore", return_value=self.store),
             mock.patch.object(commands, "ask_agent", return_value=run),
             mock.patch.object(commands, "_receipts_between", return_value=[]),
-            mock.patch.object(commands.boto3, "client", return_value=fake_iam(allowed)),
+            mock.patch.object(commands.boto3, "client", return_value=fake_iam(ALLOWED_CONTROLS)),
             mock.patch("builtins.input", return_value="ROLL BACK"),
         ):
             patch.start()
@@ -371,8 +386,7 @@ class Teaching(unittest.TestCase):
         self.assertIn(f"Next: {next_command}", printed)
 
     def test_safe(self):
-        allowed = {("kopi-tools", "s3:GetObject"), ("kopi-investigator", "bedrock-agentcore:InvokeGateway")}
-        with mock.patch.object(commands.boto3, "client", return_value=fake_iam(allowed)):
+        with mock.patch.object(commands.boto3, "client", return_value=fake_iam(ALLOWED_CONTROLS)):
             _, printed = quietly(commands.cmd_safe, make_demo())
         self.assert_teaches(printed, "./kopi break")
 

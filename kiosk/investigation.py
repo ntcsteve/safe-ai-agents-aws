@@ -31,7 +31,7 @@ class ToolInputError(ValueError):
 
 
 def require_stall(stall_id, scenario):
-    if stall_id not in scenario["stalls"]:
+    if not isinstance(stall_id, str) or stall_id not in scenario["stalls"]:  # the agent chooses this value
         allowed = ", ".join(sorted(scenario["stalls"]))
         raise ToolInputError(f"unknown stall '{stall_id}'; allowed: {allowed}")
     return stall_id

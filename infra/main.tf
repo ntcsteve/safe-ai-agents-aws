@@ -98,7 +98,7 @@ resource "aws_s3_object" "site_config" {
       item       = local.promo.item
       price      = local.promo.price
       base_price = one([for i in local.scenario.stalls[local.promo.stall].items : i.price if i.id == local.promo.item])
-      label      = try(local.promo.label, local.promo.change_id)
+      label      = local.promo.label
     }
   })
 }

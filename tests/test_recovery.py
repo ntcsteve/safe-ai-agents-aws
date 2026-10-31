@@ -25,6 +25,27 @@ class RecoveryClock(unittest.TestCase):
         clock = recovery.recovery_clock(self.LOG, "MNT-142", "2026-10-28T04:49:01+00:00", tolerance_minutes=10)
         self.assertEqual(clock, "10 min 1 s after MNT-142: OVER the 10 min tolerance")
 
+    def test_the_restore_stops_the_clock(self):
+        log = {
+            "changes": [
+                *self.LOG["changes"],
+                {"change_id": "RESTORE-MNT-142", "applied_at": "2026-10-28T04:41:00+00:00"},
+            ]
+        }
+        clock = recovery.recovery_clock(log, "MNT-142", "2026-10-28T05:39:00+00:00", tolerance_minutes=10)
+        self.assertEqual(clock, "2 min 0 s after MNT-142: within the 10 min tolerance")
+
+    def test_a_new_fault_after_a_restore_restarts_the_clock(self):
+        log = {
+            "changes": [
+                {"change_id": "MNT-142", "applied_at": "2026-10-28T04:39:00+00:00"},
+                {"change_id": "RESTORE-MNT-142", "applied_at": "2026-10-28T04:41:00+00:00"},
+                {"change_id": "MNT-142", "applied_at": "2026-10-28T04:50:00+00:00"},
+            ]
+        }
+        clock = recovery.recovery_clock(log, "MNT-142", "2026-10-28T04:51:00+00:00", tolerance_minutes=10)
+        self.assertEqual(clock, "1 min 0 s after MNT-142: within the 10 min tolerance")
+
     def test_no_fault_in_the_log_means_no_clock(self):
         self.assertIsNone(
             recovery.recovery_clock(

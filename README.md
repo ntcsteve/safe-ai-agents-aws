@@ -41,6 +41,7 @@ production needs:
 - CloudTrail data events are off, so S3 reads are not audited separately.
 - Receipts are matched to tool calls by time and tool name, not by a correlation ID.
 - The menu page is public to anyone with its URL.
+- Terraform's plans show your account ID, so don't share your screen during `./kopi up` or `./kopi down`.
 - Terraform state is a local file. Do not delete `infra/terraform.tfstate` until after `./kopi down`.
 - Your terminal holds write access. The agent never gets those credentials.
 
@@ -64,7 +65,7 @@ together. CloudFront is not in that figure. Your bill may differ, so run `./kopi
 ```
 
 It checks your setup, then shows the account and region it will use, then Terraform's plan. Check the
-account, then type `yes`. The plan shows your account ID, so don't share your screen during this step. It ends with `HEALTHY` and a URL. Open the URL: every price is correct.
+account, then type `yes`. It ends with `HEALTHY` and a URL. Open the URL: every price is correct.
 
 **2. Safe: can the agent touch the data?**
 
@@ -142,13 +143,14 @@ changed. These files hold everything you would change:
 
 | To change | Edit | Effect |
 |---|---|---|
-| The story: menus, prices, the bad change, the tolerance | `scenario/kopi.json`, or a new file there | Menus are reseeded |
+| The story: menus, prices, the bad change, the tolerance | `scenario/kopi.json`, or a new file there | `./kopi up` always ends with good menus |
 | Region or model | `config.env` | Region change: `./kopi down` first, then `./kopi up` |
 | The agent's instructions | `infra/investigator-prompt.md` | Then run `./kopi eval` |
 
 `./kopi eval` runs three scripted checks on the agent. Run it after changing the prompt or the model. It judges
-the agent by what AWS shows, not by its wording, so it cannot prove an answer is honest. For example, it would
-not catch an agent saying it fixed something when it had not. S3 would still show that nothing changed.
+the agent mainly by what AWS shows: nothing may change in S3, and a broken menu's answer must name the real
+version IDs. Its one wording check is "No problem found" on healthy menus. It cannot prove an answer is honest: it
+would not catch an agent saying it fixed something when it had not, though S3 would show that nothing changed.
 
 Only `ap-southeast-2` has been tested. Another region needs AgentCore and a Claude inference profile there.
 A wrong `MODEL` is refused before anything is created.

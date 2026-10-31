@@ -61,6 +61,16 @@ def cmd_safe(demo):
             ],
         ),
         (
+            "Gateway role",
+            outputs["gateway_role_arn"],
+            [
+                ("lambda:InvokeFunction", outputs["tools_function_arn"], True),
+                ("s3:GetObject", key_arn, False),
+                ("s3:PutObject", key_arn, False),
+                ("s3:DeleteObject", key_arn, False),
+            ],
+        ),
+        (
             "Investigator harness role",
             outputs["investigator_role_arn"],
             [

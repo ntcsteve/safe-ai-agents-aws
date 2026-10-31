@@ -206,5 +206,12 @@ class InspectRecentChanges(unittest.TestCase):
         self.assertIn("price_changes", result["versions"][-2])  # so the oldest in-window has a "from"
 
 
+class StallInput(unittest.TestCase):
+    def test_a_stall_that_is_not_text_is_refused_by_name(self):
+        for stall in (["kopi"], {"a": 1}, None, 7):
+            with self.subTest(stall=stall), self.assertRaises(investigation.ToolInputError):
+                investigation.require_stall(stall, SCENARIO)
+
+
 if __name__ == "__main__":
     unittest.main()

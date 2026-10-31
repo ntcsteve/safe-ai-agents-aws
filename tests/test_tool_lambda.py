@@ -114,6 +114,11 @@ class ToolLambda(unittest.TestCase):
         result, _ = self.call("inspect_application", {"stall": "kopi"}, custom=False)
         self.assertEqual(result["error"], "unknown tool ''")
 
+    def test_a_malformed_stall_still_leaves_a_receipt(self):
+        result, receipts = self.call("inspect_application", {"stall": ["kopi"]})
+        self.assertEqual(result["error"], "invalid input")
+        self.assertEqual(len(receipts), 1)
+
     def test_recent_changes_orders_same_second_versions_latest_first(self):
         listing = {
             "Versions": [

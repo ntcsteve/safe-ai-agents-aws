@@ -84,6 +84,9 @@ def _validate_fault(fault, stalls):
 
 
 def _validate_promo(promo, fault, stalls):
+    for field in ("change_id", "title", "label"):  # checked here, so a gap is never found after a write
+        if not promo.get(field):
+            raise ScenarioError(f"promo.{field} is missing")
     stall = _require_stall(stalls, promo.get("stall"), "promo.stall")
     # This proves scoping: rolling back the fault's key must leave the promo alone.
     if promo["stall"] == fault["stall"]:
