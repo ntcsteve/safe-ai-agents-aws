@@ -107,7 +107,7 @@ check what it did as well as what it said. S3 version IDs, read before and after
 It previews the one object it would restore. Type `ROLL BACK` to approve, or anything else to stop. Expect
 `HEALTHY`, and the promo on the other menu is still there.
 
-**6. Remove everything** (about 4 minutes)
+**6. Remove everything** (4 to 6 minutes)
 
 ```
 ./kopi down
