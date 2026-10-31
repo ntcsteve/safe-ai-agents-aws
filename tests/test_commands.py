@@ -11,9 +11,10 @@ import types
 import unittest
 from unittest import mock
 
-from kiosk import commands, menu
+from kiosk import commands, config, menu
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+SETTINGS = config.Config(region="ap-southeast-2", model="au.anthropic.claude-sonnet-4-6", scenario="kopi")
 OUTPUTS = {
     "bucket": "kopi-test",
     "region": "ap-southeast-2",
@@ -61,7 +62,7 @@ class FakeStore:
 
 
 def make_demo(broken=False):
-    demo = KOPI.Demo(KOPI._load_scenario())
+    demo = KOPI.Demo(SETTINGS, KOPI._load_scenario("kopi"))
     demo.__dict__["store"] = FakeStore(demo.scenario)  # cached_property: the fake stands in for S3
     demo.__dict__["outputs"] = OUTPUTS
     if broken:

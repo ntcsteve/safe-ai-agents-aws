@@ -3,14 +3,15 @@
 # its path can. The harness config is not the boundary (a caller can widen allowedTools per invoke);
 # the harness role is, and it holds model, gateway and logs only.
 
+# The model's regions and its ARNs come from AWS, so a wrong MODEL fails at plan, before anything exists.
+data "aws_bedrock_inference_profile" "model" {
+  inference_profile_id = var.model
+}
+
 locals {
-  model = "au.anthropic.claude-sonnet-4-6" # Australian geo profile: prompts stay in-country
-  # The Regions that profile routes to (aws bedrock get-inference-profile), and nothing else.
-  model_regions = ["ap-southeast-2", "ap-southeast-4"]
-  foundation_id = "anthropic.claude-sonnet-4-6"
-  stall_list    = join(" or ", keys(local.scenario.stalls))
-  account_id    = data.aws_caller_identity.me.account_id
-  tool_files    = ["kiosk/__init__.py", "kiosk/menu.py", "kiosk/investigation.py", "kiosk/tool_lambda.py"]
+  stall_list = join(" or ", keys(local.scenario.stalls))
+  account_id = data.aws_caller_identity.me.account_id
+  tool_files = ["kiosk/__init__.py", "kiosk/menu.py", "kiosk/investigation.py", "kiosk/tool_lambda.py"]
 }
 
 # --- Tool Lambda (read-only) ------------------------------------------------------------------
@@ -199,18 +200,18 @@ data "aws_iam_policy_document" "harness_base" {
   statement {
     sid       = "PinnedProfile"
     actions   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
-    resources = ["arn:aws:bedrock:${var.region}:${local.account_id}:inference-profile/${local.model}"]
+    resources = [data.aws_bedrock_inference_profile.model.inference_profile_arn]
   }
   # The model itself, only in the profile's Regions and only when reached through the profile:
   # a caller who swaps modelId or Region per invoke is denied.
   statement {
     sid       = "PinnedModelViaProfile"
     actions   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
-    resources = [for region in local.model_regions : "arn:aws:bedrock:${region}::foundation-model/${local.foundation_id}"]
+    resources = data.aws_bedrock_inference_profile.model.models[*].model_arn
     condition {
       test     = "StringEquals"
       variable = "bedrock:InferenceProfileArn"
-      values   = ["arn:aws:bedrock:${var.region}:${local.account_id}:inference-profile/${local.model}"]
+      values   = [data.aws_bedrock_inference_profile.model.inference_profile_arn]
     }
   }
   statement {
@@ -301,7 +302,7 @@ resource "aws_bedrockagentcore_harness" "investigator" {
 
   model {
     bedrock_model_config {
-      model_id = local.model
+      model_id = var.model
     }
   }
   system_prompt {

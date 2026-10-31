@@ -27,11 +27,10 @@ sys.path.insert(0, str(ROOT))
 
 from botocore.exceptions import BotoCoreError, ClientError  # noqa: E402
 
-from kiosk import commands, menu, recovery  # noqa: E402
+from kiosk import commands, config, menu, recovery  # noqa: E402
 from kiosk.s3_store import MenuStore  # noqa: E402
 
 INFRA = ROOT / "infra"
-SCENARIO_NAME = "kopi"
 
 
 class NotDeployed(RuntimeError):
@@ -39,9 +38,10 @@ class NotDeployed(RuntimeError):
 
 
 class Demo:
-    """What every command gets: the scenario, the deployed outputs, and the menu operations."""
+    """What every command gets: the config, the scenario, the deployed outputs, and the menu operations."""
 
-    def __init__(self, scenario):
+    def __init__(self, settings, scenario):
+        self.settings = settings
         self.scenario = scenario
 
     @functools.cached_property
@@ -90,13 +90,13 @@ class Demo:
 
 
 def cmd_up(demo):
-    _terraform("init", "-input=false")
-    _terraform("apply", f"-var=scenario={SCENARIO_NAME}")
+    _terraform("init", "-input=false", "-lockfile=readonly")  # the tested providers, never newer ones
+    _terraform("apply", *demo.settings.terraform_vars())
     print(f"UP: {demo.outputs['url']}\nNext: ./kopi reset")
 
 
 def cmd_down(demo):
-    _terraform("destroy", f"-var=scenario={SCENARIO_NAME}")
+    _terraform("destroy", *demo.settings.terraform_vars())
     print("DOWN: everything Terraform created is deleted.")
 
 
@@ -123,8 +123,19 @@ def _log_entry(change, key, version_id):
     }
 
 
-def _load_scenario():
-    return menu.load_scenario(json.loads((ROOT / "scenario" / f"{SCENARIO_NAME}.json").read_text()))
+def _load_config():
+    path = ROOT / "config.env"
+    if not path.exists():
+        raise config.ConfigInvalid("config.env is missing")
+    return config.parse_config(path.read_text(), {file.stem for file in (ROOT / "scenario").glob("*.json")})
+
+
+def _load_scenario(name):
+    path = ROOT / "scenario" / f"{name}.json"
+    try:
+        return menu.load_scenario(json.loads(path.read_text()))
+    except menu.ScenarioError as error:
+        raise menu.ScenarioError(f"{error}. Next: fix scenario/{name}.json") from error
 
 
 def _terraform(*args):
@@ -137,9 +148,12 @@ def main(argv):
         print(__doc__)
         return 2
     try:
-        return COMMANDS[name](Demo(_load_scenario())) or 0
+        settings = _load_config()
+        return COMMANDS[name](Demo(settings, _load_scenario(settings.scenario))) or 0
+    except config.ConfigInvalid as error:
+        print(f"CONFIG INVALID: {error}. Next: fix config.env")
     except menu.ScenarioError as error:
-        print(f"SCENARIO INVALID: {error}. Next: fix scenario/{SCENARIO_NAME}.json")
+        print(f"SCENARIO INVALID: {error}")
     except menu.ChangeRefused as error:
         print(f"REFUSED: {error}")
     except (NotDeployed, commands.AgentUnavailable) as error:

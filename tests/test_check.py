@@ -13,7 +13,7 @@ FAKE_TOOL = """#!/bin/sh
 case "$*" in *"$FAIL_STEP"*) echo "fake failure"; exit 1;; esac
 echo "ℹ pass 1"
 """
-STEPS = ["ruff check", "ruff format", "unittest", "--test", "fmt -check", "validate"]
+STEPS = ["ruff check", "ruff format", "unittest", "--test", "fmt -check", "init", "validate"]
 
 
 def run_check(fail_step):

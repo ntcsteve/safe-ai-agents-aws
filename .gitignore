@@ -1,6 +1,7 @@
 # Secrets never leave this machine.
 .env
 *.env
+!config.env
 env.sh
 *.tfvars
 
@@ -8,7 +9,6 @@ env.sh
 *.tfstate
 *.tfstate.*
 .terraform/
-.terraform.lock.hcl
 tfplan
 infra/.build/
 

@@ -15,5 +15,6 @@ echo "== Terraform fmt"
 terraform fmt -check -recursive infra
 echo "formatted"
 echo "== Terraform valid"
+terraform -chdir=infra init -backend=false -input=false -lockfile=readonly >/dev/null
 terraform -chdir=infra validate -no-color | head -1
 echo "GREEN"
