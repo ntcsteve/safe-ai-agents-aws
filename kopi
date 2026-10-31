@@ -27,7 +27,7 @@ sys.path.insert(0, str(ROOT))
 
 from botocore.exceptions import BotoCoreError, ClientError  # noqa: E402
 
-from kiosk import commands, config, menu, recovery  # noqa: E402
+from kiosk import commands, config, menu, preflight, recovery  # noqa: E402
 from kiosk.s3_store import MenuStore  # noqa: E402
 
 INFRA = ROOT / "infra"
@@ -90,9 +90,11 @@ class Demo:
 
 
 def cmd_up(demo):
+    print(f"Target: {preflight.check(demo.settings)}")
     _terraform("init", "-input=false", "-lockfile=readonly")  # the tested providers, never newer ones
-    _terraform("apply", *demo.settings.terraform_vars())
-    print(f"UP: {demo.outputs['url']}\nNext: ./kopi reset")
+    _terraform("apply", *demo.settings.terraform_vars())  # shows the plan and asks before it creates anything
+    demo.reset()
+    print(f"UP: {demo.outputs['url']}\nNext: ./kopi safe. When finished: ./kopi down, because this costs money")
 
 
 def cmd_down(demo):
@@ -156,6 +158,8 @@ def main(argv):
         print(f"SCENARIO INVALID: {error}")
     except menu.ChangeRefused as error:
         print(f"REFUSED: {error}")
+    except preflight.PreflightFailed as error:
+        print(f"PREFLIGHT FAILED: {error}")
     except (NotDeployed, commands.AgentUnavailable) as error:
         print(error)
     except subprocess.CalledProcessError as error:

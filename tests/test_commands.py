@@ -23,6 +23,7 @@ OUTPUTS = {
     "gateway_arn": "arn:aws:bedrock-agentcore:ap-southeast-2:000000000000:gateway/kopi",
     "investigator_harness_arn": "arn:aws:bedrock-agentcore:ap-southeast-2:000000000000:harness/kopi",
     "tools_function": "kopi-tools",
+    "url": "https://example.cloudfront.net/",
 }
 
 
@@ -116,6 +117,31 @@ class Safe(unittest.TestCase):
         """An allowed control proves the simulator is really being asked."""
         result, _ = self.safe(set())
         self.assertEqual(result, 1)
+
+
+class Up(unittest.TestCase):
+    def up(self, **check):
+        with (
+            mock.patch.object(KOPI.preflight, "check", **check) as preflight_check,
+            mock.patch.object(KOPI, "_terraform") as terraform,
+        ):
+            demo = make_demo(broken=True)
+            result, printed = quietly(KOPI.cmd_up, demo)
+        return result, printed, terraform, preflight_check, demo
+
+    def test_shows_the_target_deploys_then_seeds_healthy_menus(self):
+        _, printed, terraform, _, demo = self.up(return_value="account ********3333, region ap-southeast-2")
+        self.assertIn("Target: account ********3333, region ap-southeast-2", printed)
+        self.assertEqual([call.args[0] for call in terraform.call_args_list], ["init", "apply"])
+        self.assertIn("HEALTHY", printed)
+        self.assertIn("Next: ./kopi safe", printed)
+        self.assertEqual([entry["change_id"] for entry in demo.store.log["changes"]], ["PROMO-7"])
+
+    def test_a_failed_preflight_creates_nothing(self):
+        refusal = KOPI.preflight.PreflightFailed("no working AWS credentials")
+        result, _, terraform, _, _ = self.up(side_effect=refusal)
+        self.assertIs(result, refusal)
+        terraform.assert_not_called()
 
 
 class Break(unittest.TestCase):
