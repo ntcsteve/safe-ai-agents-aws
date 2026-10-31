@@ -14,7 +14,7 @@ DEPLOYED = {
     "scenario": "kopi",
     **HASHES,
 }
-COMMANDS = ("status", "up", "safe", "break", "observe", "recover", "check", "reset", "down", "eval")
+COMMANDS = ("status", "up", "safe", "break", "observe", "recover", "check", "reset", "eval")
 
 
 def read(deployed=DEPLOYED, is_healthy=True):
@@ -63,7 +63,6 @@ class Gates(unittest.TestCase):
     def test_the_whole_table(self):
         allowed_in = {
             "status": set(State),
-            "down": set(State),
             "up": set(State) - {State.REGION_CHANGED},
             "safe": {State.HEALTHY, State.BROKEN},
             "break": {State.HEALTHY},

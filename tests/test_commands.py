@@ -198,6 +198,85 @@ class Gate(unittest.TestCase):
         self.assertEqual(set(KOPI.COMMANDS), set(states.ALLOWED))
 
 
+class VersionedStore(FakeStore):
+    """FakeStore that keeps every write as a version, as the bucket does."""
+
+    def __init__(self, scenario):
+        super().__init__(scenario)
+        self.history = {key: [json.loads(json.dumps(body))] for key, body in self.menus.items()}
+
+    def write_menu(self, key, stall_menu):
+        self.history[key].insert(0, json.loads(json.dumps(stall_menu)))
+        return super().write_menu(key, stall_menu)
+
+    def recent_versions(self, key, count):
+        versions = [
+            {"version_id": f"v{len(self.history[key]) - position}", "size": 1, "last_modified": "t", "menu": body}
+            for position, body in enumerate(self.history[key])
+        ]
+        return versions[:count]
+
+
+class Journey(unittest.TestCase):
+    """The whole walk through the real main, Demo and state table. Only AWS and the agent are faked, because
+    each part passing alone proved nothing once: ./check was GREEN with the state table not connected."""
+
+    def setUp(self):
+        demo = KOPI.Demo(SETTINGS, KOPI._load_scenario("kopi"))
+        self.deployed = {**OUTPUTS, **demo.file_hashes()}
+        self.store = VersionedStore(demo.scenario)
+        allowed = {("kopi-tools", "s3:GetObject"), ("kopi-investigator", "bedrock-agentcore:InvokeGateway")}
+        run = Observe().run_of()
+        for patch in (
+            mock.patch.object(KOPI, "read_deployed", side_effect=lambda: self.deployed),
+            mock.patch.object(KOPI, "MenuStore", return_value=self.store),
+            mock.patch.object(commands, "ask_agent", return_value=run),
+            mock.patch.object(commands, "_receipts_between", return_value=[]),
+            mock.patch.object(commands.boto3, "client", return_value=fake_iam(allowed)),
+            mock.patch("builtins.input", return_value="ROLL BACK"),
+        ):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def run_command(self, *args):
+        return quietly(KOPI.main, ["kopi", *args])
+
+    def test_the_readme_journey_in_order(self):
+        for command, code, shown in (
+            ("safe", 0, "BOUNDARY HOLDS"),
+            ("break", 1, "Next: ./kopi observe"),
+            ("observe", 0, "Next: ./kopi recover"),
+            ("recover", 0, "RECOVERED"),
+            ("reset", 0, "HEALTHY"),
+        ):
+            with self.subTest(command=command):
+                result, printed = self.run_command(command)
+                self.assertEqual(result, code, printed)
+                self.assertIn(shown, printed)
+
+    def test_out_of_order_is_refused_and_writes_nothing(self):
+        for command, shown in (("observe", "./kopi break"), ("recover", "./kopi break")):
+            with self.subTest(command=command):
+                result, printed = self.run_command(command)
+                self.assertEqual(result, 2)
+                self.assertIn(shown, printed)
+        self.assertEqual(self.store.writes, [])
+
+    def test_bare_kopi_follows_the_journey(self):
+        self.assertIn("Next:  ./kopi break", self.run_command()[1])
+        self.run_command("break")
+        self.assertIn("Next:  ./kopi observe", self.run_command()[1])
+        self.run_command("recover")
+        self.assertIn("State: HEALTHY", self.run_command()[1])
+
+    def test_an_edited_file_stops_everything_but_up_and_down(self):
+        self.deployed = {**self.deployed, "prompt_hash": "older"}
+        result, printed = self.run_command("break")
+        self.assertEqual(result, 2)
+        self.assertIn("CONFIG NOT APPLIED: the agent prompt differs", printed)
+        self.assertEqual(self.store.writes, [])
+
+
 class Recover(unittest.TestCase):
     KEY = "menus/stall-kopi.json"
 
@@ -348,46 +427,63 @@ class FakeLogs:
 
 
 class Down(unittest.TestCase):
-    def down(self, **terraform):
-        logs = FakeLogs()
+    def down(self, logs=None, deployed=OUTPUTS, **terraform):
+        logs = logs or FakeLogs()
         with (
-            mock.patch.object(KOPI, "_terraform", **terraform),
-            mock.patch.object(commands.boto3, "client", return_value=logs),
+            mock.patch.object(KOPI, "read_deployed", return_value=deployed),
+            mock.patch.object(KOPI, "_terraform", **terraform) as called,
+            mock.patch.object(commands.boto3, "client", return_value=logs) as client,
         ):
-            result, printed = quietly(KOPI.cmd_down, make_demo())
-        return result, printed, logs
+            result, printed = quietly(KOPI.cmd_down)
+        return result, printed, logs, called, client
 
     def test_removes_the_log_group_agentcore_created_and_nothing_else(self):
-        _, printed, logs = self.down()
+        _, printed, logs, _, _ = self.down()
         self.assertEqual(len(logs.groups), 1)
         self.assertIn("harness_acd_kopi_investigator", logs.groups[0])
         self.assertIn("1 agent log group(s)", printed)
 
     def test_running_it_twice_is_safe(self):
         logs = FakeLogs()
-        with mock.patch.object(KOPI, "_terraform"), mock.patch.object(commands.boto3, "client", return_value=logs):
-            quietly(KOPI.cmd_down, make_demo())
-            result, printed = quietly(KOPI.cmd_down, make_demo())
+        self.down(logs)
+        result, printed, _, _, _ = self.down(logs)
         self.assertEqual(result, None)
         self.assertIn("0 agent log group(s)", printed)
 
-    def test_destroys_what_is_deployed_even_after_config_env_changed(self):
-        demo = make_demo()
-        demo.settings = config.Config(region="us-east-1", model="other", scenario="books")
-        with (
-            mock.patch.object(KOPI, "_terraform") as terraform,
-            mock.patch.object(commands.boto3, "client", return_value=FakeLogs()) as client,
-        ):
-            quietly(KOPI.cmd_down, demo)
+    def test_a_cancelled_destroy_leaves_the_logs_alone(self):
+        cancelled = subprocess.CalledProcessError(1, "terraform")
+        result, _, logs, _, _ = self.down(side_effect=cancelled)
+        self.assertIs(result, cancelled)
+        self.assertEqual(len(logs.groups), 2)
+
+    def test_uses_what_is_deployed_whatever_config_env_says(self):
+        with mock.patch.object(KOPI, "_load_config", side_effect=config.ConfigInvalid("REGON")):
+            _, _, _, terraform, client = self.down()
         self.assertIn("-var=region=ap-southeast-2", terraform.call_args.args)
         self.assertIn("-var=model=au.anthropic.claude-sonnet-4-6", terraform.call_args.args)
         client.assert_called_once_with("logs", region_name="ap-southeast-2")
 
-    def test_a_cancelled_destroy_leaves_the_logs_alone(self):
-        cancelled = subprocess.CalledProcessError(1, "terraform")
-        result, _, logs = self.down(side_effect=cancelled)
-        self.assertIs(result, cancelled)
-        self.assertEqual(len(logs.groups), 2)
+    def test_nothing_in_the_outputs_still_runs_destroy_from_config_env(self):
+        """Outputs can be gone while resources remain, after a partial apply or destroy."""
+        with mock.patch.object(KOPI, "_load_config", return_value=SETTINGS):
+            _, _, _, terraform, _ = self.down(deployed=None)
+        self.assertEqual(terraform.call_args.args[0], "destroy")
+
+    def test_down_never_loads_the_scenario_or_reads_the_menus(self):
+        """These fail on a typo or a deleted bucket, and down is the one way to stop the bill."""
+        with (
+            mock.patch.object(KOPI, "read_deployed", return_value=OUTPUTS),
+            mock.patch.object(KOPI, "_terraform"),
+            mock.patch.object(commands.boto3, "client", return_value=FakeLogs()),
+            mock.patch.object(KOPI, "_load_config", side_effect=config.ConfigInvalid("REGON")),
+            mock.patch.object(KOPI, "_load_scenario", side_effect=menu.ScenarioError("bad")) as scenario,
+            mock.patch.object(KOPI.Demo, "state") as state,
+        ):
+            result, printed = quietly(KOPI.main, ["kopi", "down"])
+        self.assertEqual(result, 0)
+        self.assertIn("DOWN", printed)
+        scenario.assert_not_called()
+        state.assert_not_called()
 
 
 class Break(unittest.TestCase):

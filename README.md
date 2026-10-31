@@ -27,7 +27,7 @@ Three promises, each one proven by a command:
 
 | Promise | Means | Proven by |
 |---|---|---|
-| Safe | The agent cannot write, whatever it decides | `./kopi safe` |
+| Safe | No role the agent reaches has permission to write | `./kopi safe` |
 | Observable | Every tool call leaves a receipt the agent cannot edit | `./kopi observe` |
 | Recoverable | A person approves a restore of exactly one object | `./kopi recover` |
 
@@ -72,7 +72,9 @@ account, then type `yes`. It ends with `HEALTHY` and a URL. Open the URL: every 
 ./kopi safe
 ```
 
-AWS's IAM simulator checks each role the agent reaches. Expect `BOUNDARY HOLDS`.
+AWS's IAM simulator checks each role the agent reaches. Expect `BOUNDARY HOLDS`. This reads the roles' own
+policies, so it proves what they allow. It does not cover organization-wide policies, and it is not a live
+call being refused.
 
 **3. Break it**
 

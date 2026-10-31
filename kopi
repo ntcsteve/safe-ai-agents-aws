@@ -49,13 +49,7 @@ class Demo:
 
     @functools.cached_property
     def deployed(self):
-        """Terraform's outputs, or None when nothing is deployed."""
-        try:
-            result = subprocess.run(["terraform", f"-chdir={INFRA}", "output", "-json"], capture_output=True, text=True)
-        except FileNotFoundError:  # no Terraform yet: ./kopi up's preflight names the fix
-            return None
-        outputs = json.loads(result.stdout or "{}") if result.returncode == 0 else {}
-        return {name: value["value"] for name, value in outputs.items()} if "bucket" in outputs else None
+        return read_deployed()
 
     @property
     def outputs(self):
@@ -146,12 +140,13 @@ def cmd_up(demo):
     print(f"UP: {demo.outputs['url']}\nNext: ./kopi safe. When finished: ./kopi down, because this costs money")
 
 
-def cmd_down(demo):
-    # What is deployed, not what config.env says now: after an edit, the new values would miss the stack.
-    live = demo.deployed
-    settings = config.Config(live["region"], live["model"], live["scenario"]) if live else demo.settings
+def cmd_down():
+    """Runs before the state table and needs only Terraform: no typo, bad scenario or missing bucket may stand
+    between someone and stopping the bill. It uses what is deployed, because after an edit config.env would miss
+    the stack. With no outputs it still destroys from config.env: a partial apply can leave resources behind."""
+    live = read_deployed()
+    settings = config.Config(live["region"], live["model"], live["scenario"]) if live else _load_config()
     _terraform("destroy", *settings.terraform_vars())
-    demo.forget_deployed()
     removed = commands.delete_agent_logs(settings.region)
     print(f"DOWN: everything is deleted, including {removed} agent log group(s) Terraform did not create.")
 
@@ -175,7 +170,6 @@ COMMANDS = {
     "recover": commands.cmd_recover,
     "check": lambda demo: demo.check(),
     "reset": lambda demo: demo.reset(),
-    "down": cmd_down,
     "eval": commands.cmd_eval,
 }
 
@@ -189,6 +183,16 @@ def _log_entry(change, key, version_id):
         "applied_at": datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds"),
         "approved_by": "the operator",
     }
+
+
+def read_deployed():
+    """Terraform's outputs, or None when nothing is deployed."""
+    try:
+        result = subprocess.run(["terraform", f"-chdir={INFRA}", "output", "-json"], capture_output=True, text=True)
+    except FileNotFoundError:  # no Terraform yet: ./kopi up's preflight names the fix
+        return None
+    outputs = json.loads(result.stdout or "{}") if result.returncode == 0 else {}
+    return {name: value["value"] for name, value in outputs.items()} if "bucket" in outputs else None
 
 
 def _load_config():
@@ -212,10 +216,12 @@ def _terraform(*args):
 
 def main(argv):
     name = argv[1] if len(argv) > 1 else "status"
-    if name not in COMMANDS:
+    if name != "down" and name not in COMMANDS:
         print(__doc__)
         return 2
     try:
+        if name == "down":
+            return cmd_down() or 0
         settings = _load_config()
         demo = Demo(settings, _load_scenario(settings.scenario))
         state = demo.state()

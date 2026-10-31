@@ -19,7 +19,7 @@ RUNNING = {State.HEALTHY, State.BROKEN}
 
 ALLOWED = {
     "status": set(State),
-    "down": set(State),  # always: the way out must never be blocked
+    # Not "down": it runs before this table, because the way out must never be blocked.
     "up": set(State) - {State.REGION_CHANGED},
     "safe": RUNNING,
     "break": {State.HEALTHY},
