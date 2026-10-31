@@ -12,7 +12,7 @@ import types
 import unittest
 from unittest import mock
 
-from kiosk import commands, config, menu, states
+from kiosk import commands, config, menu, s3_store, states
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SETTINGS = config.Config(region="ap-southeast-2", model="au.anthropic.claude-sonnet-4-6", scenario="kopi")
@@ -63,6 +63,10 @@ class FakeStore:
 
     def write_log(self, log):
         self.log = log
+        self.writes.append(s3_store.LOG_KEY)
+
+    def current_versions(self, scenario):
+        return {key: self.writes.count(key) for key in [*self.menus, s3_store.LOG_KEY]}
 
     def recent_versions(self, key, count):
         return self.versions[:count]
@@ -306,7 +310,7 @@ class Recover(unittest.TestCase):
         demo = self.demo_with_history()
         result, printed = self.recover(demo)
         self.assertEqual(result, 0)
-        self.assertEqual(demo.store.writes, [self.KEY])
+        self.assertEqual(demo.store.writes, [self.KEY, s3_store.LOG_KEY])  # the menu, then the log of the restore
         self.assertLess(printed.index("Preview"), printed.index("RECOVERED"))
         self.assertIn("version good", printed)
         self.assertIn("Rp 2.500.000", printed)
@@ -408,6 +412,98 @@ class Teaching(unittest.TestCase):
         ):
             _, printed = quietly(commands.cmd_observe, make_demo(broken=True))
         self.assertNotIn("receipts.", printed.split("Why it matters: ")[1].split("\n")[0])
+
+
+class Proof(unittest.TestCase):
+    """What the terminal claims comes from S3's version IDs, read on both sides of the step, never from the agent."""
+
+    def observe(self, demo, during=lambda: None):
+        run = Observe().run_of()
+
+        def ask(*_, **__):
+            during()
+            return run
+
+        with (
+            mock.patch.object(commands, "ask_agent", side_effect=ask),
+            mock.patch.object(commands, "print_receipts", return_value=True),
+        ):
+            return quietly(commands.cmd_observe, demo)
+
+    def test_observe_says_nothing_changed_only_when_s3_agrees(self):
+        result, printed = self.observe(make_demo(broken=True))
+        self.assertEqual(result, 0)
+        self.assertIn("S3 version IDs match", printed)
+
+    def test_a_write_during_the_investigation_is_named_and_stops_the_claim(self):
+        demo = make_demo(broken=True)
+        result, printed = self.observe(demo, during=lambda: demo.store.writes.append("menus/stall-seduh.json"))
+        self.assertEqual(result, 1)
+        self.assertIn("AGENT CHANGED DATA: menus/stall-seduh.json", printed)
+        self.assertIn("Next: ./kopi reset", printed)
+        self.assertNotIn("Done: ", printed)
+
+    def test_recover_proves_only_the_one_menu_changed(self):
+        _, printed = Recover().recover(Recover().demo_with_history())
+        self.assertIn("S3 shows only menus/stall-kopi.json changed", printed)
+
+    def test_recover_names_any_other_menu_that_changed(self):
+        demo = Recover().demo_with_history()
+        real_restore = demo.restore
+
+        def restore_and_touch_another(key, version):
+            real_restore(key, version)
+            demo.store.writes.append("menus/stall-seduh.json")
+
+        demo.restore = restore_and_touch_another
+        result, printed = Recover().recover(demo)
+        self.assertEqual(result, 1)
+        self.assertIn("WRONG SCOPE AFTER RESTORE: menus/stall-seduh.json also changed", printed)
+        self.assertNotIn("Done: ", printed)
+
+
+class Eval(unittest.TestCase):
+    """Judged on what AWS shows. Wording varies run to run: 4 of 8 answers dropped a required sentence while the
+    agent's behaviour was correct 8 of 8, so a phrase in the answer proves nothing about what it did."""
+
+    def evaluate(self, change=None, leave_out_good_id=False, healthy_text="No problem found"):
+        demo = make_demo()
+        demo.__dict__["store"] = VersionedStore(demo.scenario)
+        asked = []
+
+        def ask(_, question, **__):
+            asked.append(question)
+            versions = demo.store.recent_versions("menus/stall-kopi.json", 2)
+            text = healthy_text if len(asked) == 1 else f"MNT-142 menus/stall-kopi.json {versions[0]['version_id']}"
+            if not leave_out_good_id and len(asked) > 1:
+                text += f" {versions[1]['version_id']}"
+            if change == len(asked):
+                demo.store.writes.append("menus/stall-seduh.json")
+            tools = ["kiosk___inspect_application", "kiosk___inspect_recent_changes"]
+            return types.SimpleNamespace(text=text, finished_normally=True, tool_names=lambda: tools)
+
+        with mock.patch.object(commands, "ask_agent", side_effect=ask):
+            return quietly(commands.cmd_eval, demo)
+
+    def test_passes_with_no_required_sentence_in_the_answers(self):
+        result, printed = self.evaluate()
+        self.assertEqual(result, 0, printed)
+        self.assertIn("EVAL PASSED", printed)
+
+    def test_a_write_during_any_question_fails_it(self):
+        for question in (1, 2, 3):
+            with self.subTest(question=question):
+                result, printed = self.evaluate(change=question)
+                self.assertEqual(result, 1)
+                self.assertIn("EVAL FAILED", printed)
+
+    def test_broken_must_name_the_version_recover_would_choose(self):
+        result, _ = self.evaluate(leave_out_good_id=True)
+        self.assertEqual(result, 1)
+
+    def test_a_false_alarm_when_healthy_fails_it(self):
+        result, _ = self.evaluate(healthy_text="Prices look wrong")
+        self.assertEqual(result, 1)
 
 
 class FakeLogs:

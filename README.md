@@ -64,7 +64,7 @@ together. CloudFront is not in that figure. Your bill may differ, so run `./kopi
 ```
 
 It checks your setup, then shows the account and region it will use, then Terraform's plan. Check the
-account, then type `yes`. It ends with `HEALTHY` and a URL. Open the URL: every price is correct.
+account, then type `yes`. The plan shows your account ID, so don't share your screen during this step. It ends with `HEALTHY` and a URL. Open the URL: every price is correct.
 
 **2. Safe: can the agent touch the data?**
 
@@ -83,7 +83,7 @@ call being refused.
 ```
 
 A change that was approved, and wrong: three prices go up 100 times. Refresh the page and they are marked.
-The clock starts against a 10-minute limit.
+The clock starts against a 10-minute tolerance.
 
 **4. Observable: what happened, and what did the agent do?**
 
@@ -92,7 +92,7 @@ The clock starts against a 10-minute limit.
 ```
 
 The agent reports facts, a hypothesis, gaps and a proposed recovery. Then come its receipts, so you can
-check what it did as well as what it said. It changes nothing.
+check what it did as well as what it said. S3 version IDs, read before and after, prove it changed nothing.
 
 **5. Recoverable: put it right**
 
@@ -127,8 +127,10 @@ Every command names its state and what to do next. `./kopi` shows them at any ti
 | `AGENT UNAVAILABLE` | The model or harness failed | `observe` shows the same evidence without the agent |
 | `RECEIPTS INCOMPLETE` | CloudWatch has not stored them all yet | `./kopi observe` in a minute |
 | `RECEIPTS MISMATCH` | A tool ran that the agent did not report | Trust the receipts |
+| `AGENT CHANGED DATA` | S3 changed while the agent ran. This should be impossible | `./kopi reset`, then find out what wrote it |
 | `NO GOOD VERSION` | No healthy version in the recent history | `./kopi reset` |
 | `WRONG SCOPE` | More than the one menu is broken | `./kopi reset` |
+| `WRONG SCOPE AFTER RESTORE` | S3 shows another menu changed too | `./kopi reset`, then find out why |
 | `PREVIEW ONLY` | You did not type `ROLL BACK`, so nothing was written | `./kopi recover` |
 | `BOUNDARY BROKEN` | A role can do more than it should | Fix `infra/`, then `./kopi up` |
 
@@ -139,11 +141,13 @@ changed. These files hold everything you would change:
 
 | To change | Edit | Effect |
 |---|---|---|
-| The story: menus, prices, the bad change, the limit | `scenario/kopi.json`, or a new file there | Menus are reseeded |
+| The story: menus, prices, the bad change, the tolerance | `scenario/kopi.json`, or a new file there | Menus are reseeded |
 | Region or model | `config.env` | Region change: `./kopi down` first, then `./kopi up` |
 | The agent's instructions | `infra/investigator-prompt.md` | Then run `./kopi eval` |
 
-`./kopi eval` runs three scripted checks on the agent. Run it after changing the prompt or the model.
+`./kopi eval` runs three scripted checks on the agent. Run it after changing the prompt or the model. It judges
+the agent by what AWS shows, not by its wording, so it cannot prove an answer is honest. For example, it would
+not catch an agent saying it fixed something when it had not. S3 would still show that nothing changed.
 
 Only `ap-southeast-2` has been tested. Another region needs AgentCore and a Claude inference profile there.
 A wrong `MODEL` is refused before anything is created.
@@ -159,7 +163,7 @@ For a copy outside the account, see [Get started with Clumio on AWS](https://git
 ## How it is built
 
 ```
-scenario/kopi.json   the story: menus, the bad change, the good change, the limit
+scenario/kopi.json   the story: menus, the bad change, the good change, the tolerance
 config.env           where it runs: region, model, scenario
 kopi                 the one command
 kiosk/states.py      what is true now, and what each command may do
@@ -184,7 +188,7 @@ tests/               what ./check runs
 | PROMO-7 | A good change on the other stall. The restore must leave it alone |
 | harness | The AgentCore agent. It has two read-only tools and no shell |
 | receipt | A log line the tool writes for each call, outside the agent's reach |
-| limit | How long a wrong menu is tolerated: 10 minutes. The clock measures against it |
+| tolerance | How long a wrong menu is acceptable: 10 minutes. The clock measures against it |
 
 ## Status
 

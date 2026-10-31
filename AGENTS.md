@@ -9,5 +9,7 @@ Read README.md first.
    `./kopi eval` to pass 3/3, twice.
 4. **Every state has a name and a next step.** A new way to fail goes in `kiosk/states.py` or names its own
    `Next:`, with a test.
-5. **Keep it small.** The scenario file and `config.env` are the swap points. Add no command, service or
+5. **Judge the agent by what AWS shows, never by what it says.** Words are for people. Tests and printed claims
+   rest on IAM, S3 version IDs or receipts.
+6. **Keep it small.** The scenario file and `config.env` are the swap points. Add no command, service or
    abstraction a task does not need now.

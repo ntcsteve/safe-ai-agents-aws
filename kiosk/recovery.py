@@ -29,6 +29,11 @@ def choose_restore(menus, versions, stall_id, scenario):
     )
 
 
+def changed_keys(before, after):
+    """The keys whose version differs between two snapshots, in order."""
+    return [key for key in after if before.get(key) != after[key]]
+
+
 def price_changes(current_menu, restored_menu):
     """[(item name, price now, price restored)] for each item the restore changes."""
     now = {item["id"]: item["price"] for item in (current_menu or {}).get("items", [])}

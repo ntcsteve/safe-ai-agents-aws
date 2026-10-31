@@ -74,6 +74,15 @@ class KeyHistory(unittest.TestCase):
         )
 
 
+class ChangedKeys(unittest.TestCase):
+    def test_names_only_what_differs(self):
+        before = {"a": "v1", "b": "v1", "c": None}
+        self.assertEqual(recovery.changed_keys(before, {"a": "v1", "b": "v2", "c": "v1"}), ["b", "c"])
+
+    def test_nothing_changed_is_empty(self):
+        self.assertEqual(recovery.changed_keys({"a": "v1"}, {"a": "v1"}), [])
+
+
 class ChooseRestore(unittest.TestCase):
     def setUp(self):
         import json

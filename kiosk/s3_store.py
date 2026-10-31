@@ -21,6 +21,12 @@ class MenuStore:
         """key -> menu for every stall in the scenario; None where the object is missing."""
         return {menu.menu_key(stall_id): self._read_json(menu.menu_key(stall_id)) for stall_id in scenario["stalls"]}
 
+    def current_versions(self, scenario):
+        """key -> current S3 version ID for every menu and the log; None if missing. Read before and after a
+        step, this is the proof of what changed: it comes from S3, not from the agent."""
+        keys = [menu.menu_key(stall_id) for stall_id in scenario["stalls"]] + [LOG_KEY]
+        return {key: self._current_version(key) for key in keys}
+
     def write_menu(self, key, stall_menu):
         """Write one menu object. Returns the new S3 version ID, the receipt for this write."""
         response = self.s3.put_object(
@@ -60,6 +66,14 @@ class MenuStore:
             Body=(json.dumps(log, indent=2) + "\n").encode("utf-8"),
             ContentType="application/json; charset=utf-8",
         )
+
+    def _current_version(self, key):
+        try:
+            return self.s3.head_object(Bucket=self.bucket, Key=key)["VersionId"]
+        except ClientError as error:
+            if error.response["Error"]["Code"] == "404":
+                return None
+            raise
 
     def _read_json(self, key):
         try:
