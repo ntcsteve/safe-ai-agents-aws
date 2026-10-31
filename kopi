@@ -90,7 +90,7 @@ class Demo:
 
 
 def cmd_up(demo):
-    print(f"Target: {preflight.check(demo.settings)}")
+    print(f"Target: {preflight.check(demo.settings)}", flush=True)  # before Terraform writes to the same stream
     _terraform("init", "-input=false", "-lockfile=readonly")  # the tested providers, never newer ones
     _terraform("apply", *demo.settings.terraform_vars())  # shows the plan and asks before it creates anything
     demo.reset()
