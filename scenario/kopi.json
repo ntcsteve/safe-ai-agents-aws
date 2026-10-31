@@ -1,0 +1,78 @@
+{
+  "name": "kopi",
+  "title": "Kopi Kiosk",
+  "currency": {
+    "code": "IDR",
+    "symbol": "Rp ",
+    "thousands": ".",
+    "decimal": ",",
+    "decimals": 0
+  },
+  "impact_tolerance_minutes": 10,
+  "stalls": {
+    "kopi": {
+      "title": "Kopi Corner",
+      "items": [
+        {
+          "id": "kopi-susu",
+          "name": "Kopi Susu",
+          "price": 25000
+        },
+        {
+          "id": "kopi-hitam",
+          "name": "Kopi Hitam",
+          "price": 18000
+        },
+        {
+          "id": "es-kopi-gula-aren",
+          "name": "Es Kopi Gula Aren",
+          "price": 28000
+        },
+        {
+          "id": "teh-tarik",
+          "name": "Teh Tarik",
+          "price": 20000
+        }
+      ]
+    },
+    "seduh": {
+      "title": "Kopi Seduh",
+      "items": [
+        {
+          "id": "v60",
+          "name": "V60 Pour Over",
+          "price": 35000
+        },
+        {
+          "id": "long-black",
+          "name": "Long Black",
+          "price": 22000
+        },
+        {
+          "id": "kopi-flight",
+          "name": "Kopi Flight",
+          "price": 45000
+        }
+      ]
+    }
+  },
+  "fault": {
+    "change_id": "MNT-142",
+    "title": "Convert prices to minor units for the payments API",
+    "stall": "kopi",
+    "items": [
+      "kopi-susu",
+      "kopi-hitam",
+      "es-kopi-gula-aren"
+    ],
+    "factor": 100
+  },
+  "promo": {
+    "change_id": "PROMO-7",
+    "title": "Kopi Flight 20% off this week",
+    "label": "20% off",
+    "stall": "seduh",
+    "item": "kopi-flight",
+    "price": 36000
+  }
+}

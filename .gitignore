@@ -1,0 +1,20 @@
+# Secrets never leave this machine.
+.env
+*.env
+env.sh
+*.tfvars
+
+# Terraform local state, plans and build output.
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+tfplan
+infra/.build/
+
+# Personal and generated files.
+.claude/settings.local.json
+__pycache__/
+.ruff_cache/
+.DS_Store
+PLAN.md

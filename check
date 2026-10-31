@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Is everything green? Tests (Python 3.13 + JS) and Terraform format and validity.
+# Read-only: changes nothing in AWS.
+set -euo pipefail
+cd "$(dirname "$0")"
+echo "== Python style";    uvx -q ruff check . && uvx -q ruff format --check . | tail -1
+echo "== Python tests";    uv run -q --python 3.13 --with boto3 python -m unittest discover -s tests -t . 2>&1 | tail -1
+echo "== JS tests";        node --test tests/*.test.mjs 2>&1 | grep -E '^ℹ (pass|fail)'
+echo "== Terraform fmt";   terraform fmt -check -recursive infra && echo "formatted"
+echo "== Terraform valid"; printf "infra: "; terraform -chdir=infra validate -no-color | head -1
+echo "GREEN"

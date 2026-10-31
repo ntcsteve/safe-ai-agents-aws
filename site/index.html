@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4ead9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#15100c" media="(prefers-color-scheme: dark)">
+  <title>Kopi Kiosk</title>
+  <!-- Inline, so browsers never request /favicon.ico (CloudFront serves menus/* and site/* only: 403). -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%98%95%3C/text%3E%3C/svg%3E">
+  <link rel="preload" href="/site/fonts/young-serif-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <style>
+    /* Self-hosted, so the page needs one origin only (venue Wi-Fi). OFL: site/fonts/OFL.txt */
+    @font-face {
+      font-family: "Young Serif";
+      src: url("/site/fonts/young-serif-latin.woff2") format("woff2");
+      font-display: swap;
+    }
+
+    /* "Struk": a kopi-shop menu card that becomes your receipt. */
+    :root {
+      /* Light text colours meet WCAG AA (4.5:1) on the darkest ground they sit on: caramel 5.4 on
+         the card; alarm 5.3 and muted 5.4 on the wrong-row tint. */
+      --paper: #f4ead9; --card: #fbf5ea; --ink: #22150e; --muted: #6b5644;
+      --caramel: #9c5020; --pandan: #2f6b4a; --alarm: #ad2a17; --line: rgba(34, 21, 14, .14);
+      /* Fills under white text (notice, badge), the same in light and dark so white stays above 6:1
+         (white on dark mode's --alarm or --pandan would fall below 3:1). Red and green match the
+         light-mode text colours, so a wrong price and its notice are one red. */
+      --signal-red: #ad2a17; --signal-green: #2f6b4a; --signal-amber: #f2b13a;
+      --serif: "Young Serif", Georgia, serif;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      --sans: -apple-system, "Segoe UI", sans-serif;
+      /* The receipt bar's alarm ground: --alarm 9% over --card, as a plain colour, because iOS 15
+         drops a color-mix() background and the fixed bar would turn see-through. */
+      --receipt-alarm: #f4e3d7;
+      --button: 38px; --qty: 26px; /* stepper sizes; the row's control slot is computed from them */
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #15100c; --card: #1f1813; --ink: #f1e4d0; --muted: #b09a83;
+        --caramel: #e2925a; --pandan: #6fbf8f; --alarm: #ff6b55; --line: rgba(241, 228, 208, .14);
+        --receipt-alarm: #331f19;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0; color: var(--ink); background: var(--paper); font: 16px/1.45 var(--sans);
+      /* Warm glow plus fine paper grain. */
+      background-image:
+        radial-gradient(120% 60% at 50% 0%, color-mix(in srgb, var(--caramel) 16%, transparent), transparent 70%),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.07'/%3E%3C/svg%3E");
+      background-attachment: fixed;
+    }
+    .page { max-width: 520px; margin: 0 auto; padding: 0 16px calc(120px + env(safe-area-inset-bottom)); }
+
+    /* Hero */
+    .hero { position: relative; margin: 0 -16px 18px; height: min(58vh, 380px); overflow: hidden;
+            border-radius: 0 0 28px 28px; background: var(--card); }
+    .hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .hero::after { content: ""; position: absolute; inset: 0;
+                   background: linear-gradient(180deg, rgba(20, 12, 8, .15) 0%, rgba(20, 12, 8, .05) 40%, rgba(20, 12, 8, .78) 100%); }
+    .hero-text { position: absolute; left: 20px; right: 20px; bottom: 20px; z-index: 1; color: #fbf1e3; }
+    .live { display: inline-flex; align-items: center; gap: 8px; font: 600 11px/1 var(--mono); letter-spacing: .14em;
+            text-transform: uppercase; padding: 7px 10px; border-radius: 99px; background: rgba(20, 12, 8, .55);
+            backdrop-filter: blur(6px); }
+    .live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #5fd38a;
+                    box-shadow: 0 0 0 0 rgba(95, 211, 138, .7); animation: pulse 2s infinite; }
+    .live.down::before { background: var(--signal-amber); animation: none; }
+    h1 { font: 400 clamp(2.4rem, 11vw, 3.3rem)/1 var(--serif); margin: 12px 0 6px; letter-spacing: -.01em; }
+    .tagline { margin: 0; opacity: .88; font-size: .95rem; }
+
+    /* The notice: one element, one state at a time (site/incident.js). CHANGED, RESTORED or OFFLINE;
+       LIVE shows nothing. Sticky, so it stays in view while the viewer scrolls the menu. */
+    .notice { position: sticky; top: max(10px, env(safe-area-inset-top)); z-index: 4; margin: 0 0 18px;
+              padding: 14px 18px 15px; border-radius: 22px; color: #fff; box-shadow: 0 16px 30px -18px rgba(0, 0, 0, .6);
+              animation: drop .45s cubic-bezier(.2, .8, .2, 1) both; }
+    .notice.changed { background: var(--signal-red); }
+    .notice.restored { background: var(--signal-green); }
+    .notice.offline { background: var(--signal-amber); color: #2b1d07; }
+    .notice .headline { display: block; margin: 0 0 4px; font: 400 1.3rem/1.15 var(--serif); text-wrap: balance; }
+    .notice .sub { display: block; font: .88rem/1.35 var(--sans); opacity: .94; }
+    .notice .sub b { font: 600 .88rem/1 var(--mono); white-space: nowrap; }
+
+    /* Stall cards */
+    .stall { background: var(--card); border-radius: 22px; overflow: hidden; margin-bottom: 18px;
+             box-shadow: 0 1px 0 var(--line), 0 18px 40px -28px rgba(60, 30, 10, .45); }
+    .first .stall { animation: rise .6s cubic-bezier(.2, .7, .2, 1) both; }
+    .first .stall:nth-child(2) { animation-delay: .12s; }
+    .banner { position: relative; height: 128px; }
+    .banner img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .banner::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 30%, rgba(20, 12, 8, .72)); }
+    .banner h2 { position: absolute; left: 18px; bottom: 12px; z-index: 1; margin: 0; color: #fbf1e3;
+                 font: 400 1.6rem/1.1 var(--serif); }
+    .stall > h2 { font: 400 1.6rem/1.1 var(--serif); margin: 18px 18px 4px; }
+    ul { list-style: none; margin: 0; padding: 6px 18px 10px; }
+
+    /* Row: photo, then text. The control floats top-right in a slot as wide as the full stepper
+       (ordered or not), so tapping + never reflows the row. Name and price flow around it, all three
+       aligned to the photo's top; a price too wide to sit beside it ("Rp 2.500.000" on a 360 px
+       phone) drops below it instead of overlapping. */
+    .item { display: grid; grid-template-columns: 56px 1fr; column-gap: 12px; align-items: start;
+            padding: 12px 0; border-top: 1px dashed var(--line); }
+    .item:first-child { border-top: 0; }
+    .text { min-width: 0; }
+    /* As wide as the full stepper: two buttons, the quantity, 3 px padding and 1 px border each side. */
+    .slot { float: right; width: calc(2 * var(--button) + var(--qty) + 8px); margin-left: 12px;
+            display: flex; justify-content: flex-end; }
+    .thumb { width: 56px; height: 56px; border-radius: 14px; object-fit: cover; background: var(--paper); display: block; }
+    .name { text-wrap: balance; font: 400 1.08rem/1.2 var(--serif); font-variant-numeric: lining-nums; }
+    /* Inline, not flex: inline content moves below the float when it cannot fit beside it. */
+    .price-line { margin-top: 3px; }
+    .price-line > * { display: inline-block; margin-right: 8px; vertical-align: baseline; }
+    .price { font: 600 1rem/1.2 var(--mono); font-variant-numeric: tabular-nums; color: var(--caramel);
+             transform-origin: left center; white-space: nowrap; /* "Rp 2.500.000" never splits */ }
+    .was { font: .8rem/1 var(--mono); color: var(--muted); text-decoration: line-through; }
+    .badge { vertical-align: 1px; font: 600 11px/1 var(--mono);
+             letter-spacing: .06em; text-transform: uppercase; color: #fff; background: var(--signal-green);
+             padding: 4px 7px; border-radius: 99px; }
+
+    /* A wrong price stays marked, the expected price struck beside it, until it is right again. */
+    .item.wrong { background: color-mix(in srgb, var(--alarm) 10%, transparent); border-radius: 14px;
+                  margin-inline: -8px; padding-inline: 8px; border-top-color: transparent; }
+    .item.wrong + .item { border-top-color: transparent; }
+    .item.wrong + .item.wrong { margin-top: 4px; } /* adjacent tinted rows read as separate rows, not one block */
+    .item.wrong .price { color: var(--alarm); }
+    .item.restored .price { color: var(--pandan); }
+
+    /* A price that just changed flashes, so the room sees a break and a fix the moment it lands:
+       red when the new price is wrong, green (--flash) when it is the expected one. */
+    .item.changed:not(.wrong) { --flash: var(--pandan); }
+    .item.changed .price { animation: flash 2.4s ease-out; }
+    .item.changed { animation: glow 2.4s ease-out; }
+
+    .stepper { display: grid; grid-template-columns: var(--button) var(--qty) var(--button); align-items: center;
+               border: 1px solid var(--line); border-radius: 99px; padding: 3px; background: var(--paper); }
+    .stepper button { height: var(--button); border: 0; border-radius: 50%; background: transparent; color: var(--ink);
+                      font: 500 1.25rem/1 var(--sans); cursor: pointer; touch-action: manipulation;
+                      padding: 0 0 3px; /* optical centre: the glyphs' ink sits 1.4 px low otherwise */
+                      transition: transform .12s ease; }
+    .stepper button.add { background: var(--caramel); color: var(--card); /* 5.4:1 light, 7:1 dark; white was 2.5:1 in dark */ }
+    .stepper button:active { transform: scale(.88); }
+    /* Not yet ordered: just the "+", at the right of the same slot. */
+    .stepper.solo { grid-template-columns: var(--button); border-color: transparent; background: transparent; }
+    .stepper.solo button.add { box-shadow: 0 6px 14px -8px var(--caramel); }
+    .qty { text-align: center; font: 600 .95rem/1 var(--mono); }
+
+    footer { text-align: center; color: var(--muted); font-size: .82rem; padding: 8px 0 0; }
+    footer a { color: var(--caramel); }
+    footer p { margin: 4px 0; }
+
+    /* Struk: the receipt bar, always in reach, torn along its top edge. */
+    .struk { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: 18px 16px calc(14px + env(safe-area-inset-bottom));
+             background: var(--card); box-shadow: 0 -12px 30px -20px rgba(60, 30, 10, .5);
+             -webkit-mask: radial-gradient(7px at 7px 0, #0000 98%, #000) -7px 0 / 14px 100% repeat-x;
+                     mask: radial-gradient(7px at 7px 0, #0000 98%, #000) -7px 0 / 14px 100% repeat-x; }
+    /* 488 px wide like the page's content, inset 18 px like a card's, so the count and total line up
+       with the photos and controls above. */
+    .struk-inner { max-width: 488px; margin: 0 auto; padding-inline: 18px; display: flex; justify-content: space-between; gap: 12px;
+                   /* The count sits on the big total's line, not on the struck total above it.
+                      flex-end is the fallback where "last baseline" is not supported. */
+                   align-items: flex-end; align-items: last baseline; }
+    .struk.alarm { background: var(--receipt-alarm); }
+    .struk-count { font: 400 .95rem/1.3 var(--serif); color: var(--ink); }
+    .struk-total { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+    .struk-total .was { font-size: .82rem; }
+    #total { font: 700 1.45rem/1 var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    #total.bump { animation: bump .5s ease-out; }
+    #total.alarm { color: var(--alarm); }
+    #total.ok { color: var(--pandan); }
+
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(95, 211, 138, .7); } 70%, 100% { box-shadow: 0 0 0 10px rgba(95, 211, 138, 0); } }
+    @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    @keyframes flash { 0%, 30% { transform: scale(1.12); } 100% { transform: none; } }
+    @keyframes glow { 0% { background: color-mix(in srgb, var(--flash, var(--alarm)) 18%, transparent); } 100% { background: transparent; } }
+    @keyframes drop { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: none; } }
+    @keyframes bump { 0% { transform: scale(1.15); } 100% { transform: none; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <img id="hero" alt="" fetchpriority="high" hidden>
+      <div class="hero-text">
+        <span id="live" class="live">Live menu</span>
+        <h1 id="title">Kopi Kiosk</h1>
+        <p class="tagline">Build your order. Keep an eye on the prices.</p>
+      </div>
+    </header>
+    <div id="notice" class="notice" role="status" hidden></div>
+    <main id="menus" class="first"></main>
+    <footer>
+      <p>Your order stays on this phone. Nothing is sent.</p>
+      <p><a id="guide" hidden>Read the guide</a></p>
+      <p>Photos: <a href="https://unsplash.com" rel="noopener">Unsplash</a> · Type: Young Serif</p>
+    </footer>
+  </div>
+  <div class="struk">
+    <div class="struk-inner">
+      <span id="count" class="struk-count">No items yet</span>
+      <span class="struk-total"><span id="total-was" class="was" hidden></span><span id="total" aria-live="polite"></span></span>
+    </div>
+  </div>
+  <script type="module" src="/site/app.js"></script>
+</body>
+</html>

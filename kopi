@@ -1,0 +1,155 @@
+#!/usr/bin/env -S uv run --quiet --script
+# /// script
+# requires-python = ">=3.13"
+# dependencies = ["boto3", "botocore[crt]"]
+# ///
+"""Kopi Kiosk. Every command prints one named state and the next step. See README.md.
+
+./kopi up        deploy, or apply a changed config or scenario
+./kopi safe      prove nothing in the agent's path can write
+./kopi break     apply the bad change
+./kopi observe   the agent investigates, then its receipts
+./kopi check     HEALTHY or BROKEN (exit 0 or 1)
+./kopi reset     good menus, the promo live
+./kopi down      remove everything
+./kopi eval      three scripted agent checks, for prompt or model changes
+"""
+
+import datetime
+import functools
+import json
+import pathlib
+import subprocess
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
+
+from botocore.exceptions import BotoCoreError, ClientError  # noqa: E402
+
+from kiosk import commands, menu, recovery  # noqa: E402
+from kiosk.s3_store import MenuStore  # noqa: E402
+
+INFRA = ROOT / "infra"
+SCENARIO_NAME = "kopi"
+
+
+class NotDeployed(RuntimeError):
+    pass
+
+
+class Demo:
+    """What every command gets: the scenario, the deployed outputs, and the menu operations."""
+
+    def __init__(self, scenario):
+        self.scenario = scenario
+
+    @functools.cached_property
+    def outputs(self):
+        result = subprocess.run(["terraform", f"-chdir={INFRA}", "output", "-json"], capture_output=True, text=True)
+        outputs = json.loads(result.stdout or "{}") if result.returncode == 0 else {}
+        if "bucket" not in outputs:
+            raise NotDeployed("NOT DEPLOYED: no Terraform outputs in infra/. Next: ./kopi up")
+        return {name: value["value"] for name, value in outputs.items()}
+
+    @functools.cached_property
+    def store(self):
+        return MenuStore(self.outputs["bucket"], self.outputs["region"])
+
+    def reset(self):
+        promo = self.scenario["promo"]
+        expected = menu.apply_promo(menu.seed_menus(self.scenario), self.scenario)
+        fault_key, promo_key = menu.menu_key(self.scenario["fault"]["stall"]), menu.menu_key(promo["stall"])
+        self.store.write_menu(fault_key, expected[fault_key])
+        version_id = self.store.write_menu(promo_key, expected[promo_key])
+        self.store.write_log({"changes": [_log_entry(promo, promo_key, version_id)]})
+        print(f"RESET: {fault_key} good, {promo_key} with {promo['change_id']}.")
+        return self.check()
+
+    def fault(self):
+        fault = self.scenario["fault"]
+        changed = menu.apply_fault(self.store.read_menus(self.scenario), self.scenario)  # refuses before writing
+        key = menu.menu_key(fault["stall"])
+        version_id = self.store.write_menu(key, changed[key])
+        log = self.store.read_log()
+        log["changes"].append(_log_entry(fault, key, version_id))
+        self.store.write_log(log)
+        print(f"APPLIED: {fault['change_id']} {fault['title']} -> {key} (version {version_id})")
+        return self.check()
+
+    def check(self):
+        result = menu.check_menus(self.store.read_menus(self.scenario), self.scenario)
+        # While the fault is in the log (until the next reset), say how long it has been.
+        log, change_id = self.store.read_log(), self.scenario["fault"]["change_id"]
+        now = datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds")
+        clock = recovery.recovery_clock(log, change_id, now, self.scenario["impact_tolerance_minutes"])
+        print(f"{result.state}, {clock}" if clock else result.state)
+        for problem in result.problems:
+            print(f"  {problem}")
+        return 0 if result.state is menu.Health.HEALTHY else 1
+
+
+def cmd_up(demo):
+    _terraform("init", "-input=false")
+    _terraform("apply", f"-var=scenario={SCENARIO_NAME}")
+    print(f"UP: {demo.outputs['url']}\nNext: ./kopi reset")
+
+
+def cmd_down(demo):
+    _terraform("destroy", f"-var=scenario={SCENARIO_NAME}")
+    print("DOWN: everything Terraform created is deleted.")
+
+
+COMMANDS = {
+    "up": cmd_up,
+    "safe": commands.cmd_safe,
+    "break": lambda demo: demo.fault(),
+    "observe": commands.cmd_observe,
+    "check": lambda demo: demo.check(),
+    "reset": lambda demo: demo.reset(),
+    "down": cmd_down,
+    "eval": commands.cmd_eval,
+}
+
+
+def _log_entry(change, key, version_id):
+    return {
+        "change_id": change["change_id"],
+        "title": change["title"],
+        "key": key,
+        "version_id": version_id,
+        "applied_at": datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds"),
+        "approved_by": "the operator",
+    }
+
+
+def _load_scenario():
+    return menu.load_scenario(json.loads((ROOT / "scenario" / f"{SCENARIO_NAME}.json").read_text()))
+
+
+def _terraform(*args):
+    subprocess.run(["terraform", f"-chdir={INFRA}", *args], check=True)
+
+
+def main(argv):
+    name = argv[1] if len(argv) > 1 else ""
+    if name not in COMMANDS:
+        print(__doc__)
+        return 2
+    try:
+        return COMMANDS[name](Demo(_load_scenario())) or 0
+    except menu.ScenarioError as error:
+        print(f"SCENARIO INVALID: {error}. Next: fix scenario/{SCENARIO_NAME}.json")
+    except menu.ChangeRefused as error:
+        print(f"REFUSED: {error}")
+    except (NotDeployed, commands.AgentUnavailable) as error:
+        print(error)
+    except subprocess.CalledProcessError as error:
+        print(f"TERRAFORM FAILED: exit {error.returncode}. Next: read the output above")
+    except (ClientError, BotoCoreError) as error:
+        print(f"AWS FAILED: {error}. Next: check your AWS credentials")
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

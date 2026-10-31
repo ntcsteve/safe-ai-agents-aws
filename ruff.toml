@@ -1,0 +1,6 @@
+# One style for every Python file, checked by ./check.
+line-length = 120
+extend-include = ["kopi"]
+
+[lint]
+select = ["F", "E", "W", "B", "SIM", "UP", "I"]
