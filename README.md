@@ -133,6 +133,7 @@ Every command names its state and what to do next. `./kopi` shows them at any ti
 | `WRONG SCOPE AFTER RESTORE` | S3 shows another menu changed too | `./kopi reset`, then find out why |
 | `PREVIEW ONLY` | You did not type `ROLL BACK`, so nothing was written | `./kopi recover` |
 | `BOUNDARY BROKEN` | A role can do more than it should | Fix `infra/`, then `./kopi up` |
+| `TERRAFORM FAILED` during `down` | Usually a scenario file that is not valid JSON, which Terraform reads too | Fix the file it names, then `./kopi down` |
 
 ## Make it yours
 

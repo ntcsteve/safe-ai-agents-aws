@@ -141,9 +141,10 @@ def cmd_up(demo):
 
 
 def cmd_down():
-    """Runs before the state table and needs only Terraform: no typo, bad scenario or missing bucket may stand
-    between someone and stopping the bill. It uses what is deployed, because after an edit config.env would miss
-    the stack. With no outputs it still destroys from config.env: a partial apply can leave resources behind."""
+    """Runs before the state table, so a config typo, a failed scenario check or a missing bucket cannot stand
+    between someone and stopping the bill. One thing still can: Terraform reads the scenario file itself, so that
+    file must be valid JSON. It uses what is deployed, because after an edit config.env would miss the stack.
+    With no outputs it still destroys from config.env: a partial apply can leave resources behind."""
     live = read_deployed()
     settings = config.Config(live["region"], live["model"], live["scenario"]) if live else _load_config()
     _terraform("destroy", *settings.terraform_vars())
