@@ -191,13 +191,16 @@ class Status(unittest.TestCase):
     def test_running_shows_the_menus_state_and_the_next_step(self):
         _, printed = self.status(make_demo(broken=True), states.State.BROKEN)
         self.assertIn("State: BROKEN", printed)
+        self.assertIn("Page:  https://example.cloudfront.net/", printed)
         self.assertIn("Next:  ./kopi observe", printed)
 
     def test_not_deployed_never_reads_the_menus(self):
         demo = make_demo()
         demo.__dict__["store"] = None
+        demo.__dict__["deployed"] = None
         _, printed = self.status(demo, states.State.NOT_DEPLOYED)
         self.assertIn("State: NOT DEPLOYED", printed)
+        self.assertNotIn("Page:", printed)
         self.assertIn("Next:  ./kopi up", printed)
 
 
@@ -518,6 +521,14 @@ class Eval(unittest.TestCase):
     def test_a_false_alarm_when_healthy_fails_it(self):
         result, _ = self.evaluate(healthy_text="Prices look wrong")
         self.assertEqual(result, 1)
+
+    def test_a_failed_check_shows_the_answer_that_failed_it(self):
+        _, printed = self.evaluate(healthy_text="Prices look wrong")
+        self.assertIn("answer: Prices look wrong", printed)
+
+    def test_a_passed_check_shows_no_answer(self):
+        _, printed = self.evaluate()
+        self.assertNotIn("answer:", printed)
 
 
 class FakeLogs:

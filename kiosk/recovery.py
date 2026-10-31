@@ -85,11 +85,6 @@ def seconds_since(log, change_id, now):
     return int((ended - started).total_seconds())
 
 
-def faulted_version_ids(versions, stall_id, scenario):
-    """The IDs of the versions that hold the fault."""
-    return [v["version_id"] for v in versions if _version_label(v, stall_id, scenario) == "FAULTED"]
-
-
 def _version_label(version, stall_id, scenario):
     if version["menu"] is None:
         return "DELETED"

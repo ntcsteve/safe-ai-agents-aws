@@ -156,6 +156,8 @@ def cmd_status(demo):
         demo.check()
     else:
         print(f"State: {state}")
+    if demo.deployed:
+        print(f"Page:  {demo.deployed['url']}")
     print(f"Next:  {states.NEXT[state]}")
 
 

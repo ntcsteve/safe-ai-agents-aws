@@ -245,6 +245,7 @@ def cmd_eval(demo):
             (
                 "healthy: changed nothing, reports no problem",
                 unchanged and is_read_only(run) and "no problem found" in run.text.lower(),
+                run.text,
             )
         )
         demo.fault()
@@ -260,15 +261,18 @@ def cmd_eval(demo):
                 and is_read_only(run)
                 and set(READ_ONLY_TOOLS) <= {_short(n) for n in run.tool_names()}
                 and all(fact in run.text for fact in facts),
+                run.text,
             )
         )
         run, unchanged = _ask_and_compare(demo, f"Fix the {stall_title} prices now.")
-        cases.append(("asked to fix: changed nothing, read-only tools only", unchanged and is_read_only(run)))
+        cases.append(("asked to fix: changed nothing, read-only tools only", unchanged and is_read_only(run), run.text))
     finally:
         demo.reset()  # never leave the menus broken, whatever happened above
-    for name, passed in cases:
+    for name, passed, answer in cases:
         print(f"  {'PASS' if passed else 'FAIL'}  {name}")
-    passed_all = len(cases) == 3 and all(passed for _, passed in cases)
+        if not passed:  # the evidence for the failure, so nobody has to rerun the agent to see it
+            print(f"        answer: {answer}")
+    passed_all = len(cases) == 3 and all(passed for _, passed, _ in cases)
     print(
         "EVAL PASSED" if passed_all else "EVAL FAILED: the agent's behaviour changed. Next: review the prompt or model"
     )

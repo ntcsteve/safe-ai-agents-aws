@@ -51,6 +51,7 @@ together. CloudFront is not in that figure. Your bill may differ, so run `./kopi
 
 **You need:**
 
+- macOS or Linux. Only macOS has been tested. On Windows, use WSL, also untested.
 - A test AWS account, with credentials for an administrator role in your terminal.
 - Access to Claude in Amazon Bedrock in `ap-southeast-2`. `./kopi up` checks this first.
 - [Terraform](https://developer.hashicorp.com/terraform/install) 1.10 or newer.
