@@ -10,6 +10,7 @@
 ./kopi safe      prove nothing in the agent's path can write
 ./kopi break     apply the bad change
 ./kopi observe   the agent investigates, then its receipts
+./kopi recover   preview, type ROLL BACK, restore the one bad menu
 ./kopi check     HEALTHY or BROKEN (exit 0 or 1)
 ./kopi reset     good menus, the promo live
 ./kopi down      remove everything
@@ -111,6 +112,14 @@ class Demo:
         print(f"APPLIED: {fault['change_id']} {fault['title']} -> {key} (version {version_id})")
         return self.check()
 
+    def restore(self, key, version):
+        version_id = self.store.write_menu(key, version["menu"])
+        fault = self.scenario["fault"]
+        log = self.store.read_log()
+        change = {"change_id": f"RESTORE-{fault['change_id']}", "title": f"Restored from {version['version_id']}"}
+        log["changes"].append(_log_entry(change, key, version_id))
+        self.store.write_log(log)
+
     def check(self):
         result = menu.check_menus(self.store.read_menus(self.scenario), self.scenario)
         # While the fault is in the log (until the next reset), say how long it has been.
@@ -163,6 +172,7 @@ COMMANDS = {
     "safe": commands.cmd_safe,
     "break": lambda demo: demo.fault(),
     "observe": commands.cmd_observe,
+    "recover": commands.cmd_recover,
     "check": lambda demo: demo.check(),
     "reset": lambda demo: demo.reset(),
     "down": cmd_down,
@@ -219,6 +229,8 @@ def main(argv):
         print(f"SCENARIO INVALID: {error}")
     except menu.ChangeRefused as error:
         print(f"REFUSED: {error}")
+    except recovery.RecoveryRefused as error:
+        print(error)
     except preflight.PreflightFailed as error:
         print(f"PREFLIGHT FAILED: {error}")
     except (NotDeployed, commands.AgentUnavailable) as error:

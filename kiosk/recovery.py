@@ -1,8 +1,47 @@
-"""Recovery, as pure logic: the recovery clock and the key's version history."""
+"""Recovery, as pure logic: which version to restore and its scope gate, the recovery clock, the key's history."""
 
 import datetime
 
-from kiosk import investigation
+from kiosk import investigation, menu
+
+
+class RecoveryRefused(RuntimeError):
+    """The restore would not do exactly what was asked. Nothing was written."""
+
+
+def choose_restore(menus, versions, stall_id, scenario):
+    """The newest good version of the broken menu, or RecoveryRefused. Scope is the safety promise: this
+    restores one object, so it refuses unless that one object is exactly what is wrong.
+    versions: [{version_id, last_modified, size, menu or None}], newest first."""
+    key = menu.menu_key(stall_id)
+    broken = [menu.menu_key(stall) for stall in scenario["stalls"] if _is_broken(menus, stall, scenario)]
+    if broken != [key]:
+        raise RecoveryRefused(
+            f"WRONG SCOPE: this restores only {key}, but the broken menus are {broken}. "
+            "Nothing written. Next: ./kopi reset restores every menu"
+        )
+    for version in versions:
+        if _version_label(version, stall_id, scenario) == "GOOD":
+            return version
+    raise RecoveryRefused(
+        f"NO GOOD VERSION: none of the last {len(versions)} versions of {key} is healthy. "
+        "Nothing written. Next: ./kopi reset"
+    )
+
+
+def price_changes(current_menu, restored_menu):
+    """[(item name, price now, price restored)] for each item the restore changes."""
+    now = {item["id"]: item["price"] for item in (current_menu or {}).get("items", [])}
+    return [
+        (item["name"], now.get(item["id"]), item["price"])
+        for item in restored_menu["items"]
+        if now.get(item["id"]) != item["price"]
+    ]
+
+
+def _is_broken(menus, stall_id, scenario):
+    stall_menu = menus.get(menu.menu_key(stall_id))
+    return investigation.inspect_application(stall_id, stall_menu, None, None, scenario, None)["state"] != "HEALTHY"
 
 
 def recovery_clock(log, change_id, now, tolerance_minutes):

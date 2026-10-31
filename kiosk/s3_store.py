@@ -45,9 +45,7 @@ class MenuStore:
                 "last_modified": v["LastModified"].strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "menu": None
                 if v["deleted"]
-                else json.loads(
-                    self.s3.get_object(Bucket=self.bucket, Key=key, VersionId=v["VersionId"])["Body"].read()
-                ),
+                else _parsed(self.s3.get_object(Bucket=self.bucket, Key=key, VersionId=v["VersionId"])["Body"].read()),
             }
             for v in entries[:count]
         ]
@@ -70,4 +68,13 @@ class MenuStore:
             if error.response["Error"]["Code"] == "NoSuchKey":
                 return None
             raise
+        return _parsed(body)
+
+
+def _parsed(body):
+    """The object's JSON, or None if it is not valid: unreadable counts as missing, so it reads as BROKEN
+    and ./kopi reset can still run. Raising here would block the command that fixes it."""
+    try:
         return json.loads(body)
+    except ValueError:
+        return None

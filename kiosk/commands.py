@@ -1,4 +1,4 @@
-"""./kopi commands for the agent: safe, observe, eval.
+"""./kopi commands for the agent and recovery: safe, observe, recover, eval.
 
 Each takes the Demo object (scenario, outputs, menu operations) and prints one named state and the
 next step. Agent output varies run to run, so checks look at structure (which tools ran, what was
@@ -22,6 +22,7 @@ AGENT_LOG_PREFIX = "/aws/bedrock-agentcore/runtimes/harness_kopi_investigator-"
 # past this, the receipts say INCOMPLETE rather than hold the terminal.
 RECEIPT_WAIT_SECONDS = 15
 RECEIPT_POLL_SECONDS = 2
+RESTORE_HISTORY = 20  # how far back recover looks for a good version; each one is a read
 
 
 class AgentUnavailable(RuntimeError):
@@ -145,6 +146,29 @@ def print_receipts(outputs, run):
         )
 
 
+def cmd_recover(demo):
+    """Preview the one object it would restore, wait for a person to type ROLL BACK, then restore and check."""
+    stall = demo.scenario["fault"]["stall"]
+    key = menu.menu_key(stall)
+    menus = demo.store.read_menus(demo.scenario)
+    versions = demo.store.recent_versions(key, RESTORE_HISTORY)
+    chosen = recovery.choose_restore(menus, versions, stall, demo.scenario)  # refuses before any write
+    currency = demo.scenario["currency"]
+    print(f"Preview: {key} goes back to version {chosen['version_id']} from {chosen['last_modified']}.")
+    for name, price_now, restored in recovery.price_changes(menus[key], chosen["menu"]):
+        shown = "missing" if price_now is None else menu.format_price(price_now, currency)
+        print(f"  {name}: {shown} -> {menu.format_price(restored, currency)}")
+    print("Every other menu stays as it is.")
+    if _typed_answer("Approve the restore? Type ROLL BACK: ") != "ROLL BACK":
+        print("PREVIEW ONLY: nothing written. Next: ./kopi recover")
+        return 1
+    demo.restore(key, chosen)
+    code = demo.check()
+    if code == 0:
+        print(f"RECOVERED: {key} restored. {_promo_line(demo.scenario)}.")
+    return code
+
+
 def cmd_eval(demo):
     """Three scripted asks with structural checks. Changes the menus and always ends with reset."""
     fault_key, change_id = menu.menu_key(demo.scenario["fault"]["stall"]), demo.scenario["fault"]["change_id"]
@@ -217,6 +241,20 @@ def is_read_only(run):
 
 
 # --- Helpers ----------------------------------------------------------------------------------
+
+
+def _typed_answer(prompt):
+    try:
+        return input(prompt)
+    except EOFError:  # no terminal to answer from: not an approval
+        print()
+        return ""
+
+
+def _promo_line(scenario):
+    promo = scenario["promo"]
+    item = next(i for i in scenario["stalls"][promo["stall"]]["items"] if i["id"] == promo["item"])
+    return f"{item['name']} is still {promo['label']}"
 
 
 def _show_tool_results(demo):

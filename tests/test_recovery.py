@@ -74,5 +74,40 @@ class KeyHistory(unittest.TestCase):
         )
 
 
+class ChooseRestore(unittest.TestCase):
+    def setUp(self):
+        import json
+        import pathlib
+
+        from kiosk import menu
+
+        self.scenario = menu.load_scenario(
+            json.loads((pathlib.Path(__file__).resolve().parent.parent / "scenario" / "kopi.json").read_text())
+        )
+        self.healthy = menu.apply_promo(menu.seed_menus(self.scenario), self.scenario)
+        self.broken = menu.apply_fault(self.healthy, self.scenario)
+
+    def version(self, version_id, stall_menu):
+        return {"version_id": version_id, "size": 1, "last_modified": "2026-10-28T04:39:03Z", "menu": stall_menu}
+
+    def test_picks_the_newest_good_version_past_faults_and_deletes(self):
+        versions = [
+            self.version("v4", self.broken[KEY]),
+            self.version("v3", None),
+            self.version("v2", self.healthy[KEY]),
+            self.version("v1", self.healthy[KEY]),
+        ]
+        self.assertEqual(recovery.choose_restore(self.broken, versions, "kopi", self.scenario)["version_id"], "v2")
+
+    def test_a_missing_menu_can_be_restored(self):
+        menus = {**self.healthy, KEY: None}
+        versions = [self.version("v2", None), self.version("v1", self.healthy[KEY])]
+        self.assertEqual(recovery.choose_restore(menus, versions, "kopi", self.scenario)["version_id"], "v1")
+
+    def test_healthy_menus_have_nothing_to_restore(self):
+        with self.assertRaisesRegex(recovery.RecoveryRefused, "WRONG SCOPE"):
+            recovery.choose_restore(self.healthy, [], "kopi", self.scenario)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -47,12 +47,15 @@ class FakeStore:
     def __init__(self, scenario):
         self.menus = menu.apply_promo(menu.seed_menus(scenario), scenario)
         self.log = {"changes": []}
+        self.versions = []
+        self.writes = []
 
     def read_menus(self, scenario):
         return json.loads(json.dumps(self.menus))
 
     def write_menu(self, key, stall_menu):
         self.menus[key] = stall_menu
+        self.writes.append(key)
         return f"v{len(self.log['changes']) + 1}"
 
     def read_log(self):
@@ -62,7 +65,7 @@ class FakeStore:
         self.log = log
 
     def recent_versions(self, key, count):
-        return []
+        return self.versions[:count]
 
 
 def make_demo(broken=False):
@@ -191,8 +194,89 @@ class Gate(unittest.TestCase):
         self.assertIn("Next: ./kopi break", printed)
         observe.assert_not_called()
 
-    def test_every_command_in_the_table_exists(self):
-        self.assertLessEqual(set(KOPI.COMMANDS), set(states.ALLOWED))
+    def test_the_table_and_the_commands_match_exactly(self):
+        self.assertEqual(set(KOPI.COMMANDS), set(states.ALLOWED))
+
+
+class Recover(unittest.TestCase):
+    KEY = "menus/stall-kopi.json"
+
+    def demo_with_history(self):
+        """Broken now, with the fault as the newest version and the good menu before it."""
+        demo = make_demo()
+        good = demo.store.menus[self.KEY]
+        demo.store.menus = menu.apply_fault(demo.store.menus, demo.scenario)
+        demo.store.log["changes"] = [{"change_id": "MNT-142", "applied_at": "2026-10-28T04:39:00+00:00"}]
+        demo.store.versions = [
+            {
+                "version_id": "bad",
+                "size": 554,
+                "last_modified": "2026-10-28T04:39:03Z",
+                "menu": demo.store.menus[self.KEY],
+            },
+            {"version_id": "good", "size": 548, "last_modified": "2026-10-28T04:30:00Z", "menu": good},
+        ]
+        return demo
+
+    def recover(self, demo, typed="ROLL BACK"):
+        answer = {"side_effect": EOFError} if typed is None else {"return_value": typed}
+        with mock.patch("builtins.input", **answer):
+            return quietly(commands.cmd_recover, demo)
+
+    def test_previews_then_restores_only_the_broken_menu(self):
+        demo = self.demo_with_history()
+        result, printed = self.recover(demo)
+        self.assertEqual(result, 0)
+        self.assertEqual(demo.store.writes, [self.KEY])
+        self.assertLess(printed.index("Preview"), printed.index("RECOVERED"))
+        self.assertIn("version good", printed)
+        self.assertIn("Rp 2.500.000", printed)
+        self.assertIn("HEALTHY", printed)
+
+    def test_the_promo_on_the_other_menu_survives(self):
+        demo = self.demo_with_history()
+        other = json.dumps(demo.store.menus["menus/stall-seduh.json"])
+        _, printed = self.recover(demo)
+        self.assertEqual(json.dumps(demo.store.menus["menus/stall-seduh.json"]), other)
+        self.assertIn("Kopi Flight is still 20% off", printed)
+
+    def test_the_restore_is_logged_and_the_clock_stays(self):
+        demo = self.demo_with_history()
+        _, printed = self.recover(demo)
+        self.assertEqual(demo.store.log["changes"][-1]["change_id"], "RESTORE-MNT-142")
+        self.assertIn("after MNT-142", printed)
+
+    def test_anything_but_roll_back_writes_nothing(self):
+        for typed in ("", "yes", "roll back", None):
+            with self.subTest(typed=typed):
+                demo = self.demo_with_history()
+                result, printed = self.recover(demo, typed)
+                self.assertEqual(result, 1)
+                self.assertEqual(demo.store.writes, [])
+                self.assertIn("PREVIEW ONLY", printed)
+                self.assertIn("Next: ./kopi recover", printed)
+
+    def test_no_good_version_is_refused_before_asking(self):
+        demo = self.demo_with_history()
+        demo.store.versions = demo.store.versions[:1]
+        with mock.patch("builtins.input") as ask:
+            result, _ = quietly(commands.cmd_recover, demo)
+        self.assertIsInstance(result, commands.recovery.RecoveryRefused)
+        self.assertIn("NO GOOD VERSION", str(result))
+        self.assertIn("Next: ./kopi reset", str(result))
+        ask.assert_not_called()
+        self.assertEqual(demo.store.writes, [])
+
+    def test_a_second_broken_menu_is_refused_as_wrong_scope(self):
+        demo = self.demo_with_history()
+        demo.store.menus["menus/stall-seduh.json"]["items"][0]["price"] = 1
+        with mock.patch("builtins.input") as ask:
+            result, _ = quietly(commands.cmd_recover, demo)
+        self.assertIsInstance(result, commands.recovery.RecoveryRefused)
+        self.assertIn("WRONG SCOPE", str(result))
+        self.assertIn("menus/stall-seduh.json", str(result))
+        ask.assert_not_called()
+        self.assertEqual(demo.store.writes, [])
 
 
 class FakeLogs:
