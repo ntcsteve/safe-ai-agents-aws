@@ -9,10 +9,9 @@ locals {
   # hash because S3 holds a deleted bucket's name for a while: a Region move must never reuse one.
   bucket = "kopi-${substr(sha1("${data.aws_caller_identity.me.account_id}/${var.region}"), 0, 10)}"
   site_files = {
-    "site/index.html"  = "text/html; charset=utf-8"
-    "site/app.js"      = "text/javascript; charset=utf-8"
-    "site/price.js"    = "text/javascript; charset=utf-8"
-    "site/incident.js" = "text/javascript; charset=utf-8"
+    "site/index.html" = "text/html; charset=utf-8"
+    "site/app.js"     = "text/javascript; charset=utf-8"
+    "site/price.js"   = "text/javascript; charset=utf-8"
   }
   promo = local.scenario.promo
 }
@@ -88,7 +87,7 @@ resource "aws_s3_object" "site_config" {
     title  = local.scenario.title
     stalls = keys(local.scenario.stalls)
     # stall -> item -> price: the seed with the approved promo applied, the same rule as
-    # kiosk/menu.py expected_prices, so the phones and ./kopi check agree on prices.
+    # kiosk/menu.py expected_prices, so the page and ./kopi check agree on prices.
     expected_prices = {
       for id, stall in local.scenario.stalls : id => merge(
         { for item in stall.items : item.id => item.price },

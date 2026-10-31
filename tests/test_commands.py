@@ -279,6 +279,58 @@ class Recover(unittest.TestCase):
         self.assertEqual(demo.store.writes, [])
 
 
+class Teaching(unittest.TestCase):
+    """Each step of the journey ends the same way: what happened, why it matters, what to run next."""
+
+    def assert_teaches(self, printed, next_command):
+        self.assertIn("Done: ", printed)
+        self.assertIn("Why it matters: ", printed)
+        self.assertIn(f"Next: {next_command}", printed)
+
+    def test_safe(self):
+        allowed = {("kopi-tools", "s3:GetObject"), ("kopi-investigator", "bedrock-agentcore:InvokeGateway")}
+        with mock.patch.object(commands.boto3, "client", return_value=fake_iam(allowed)):
+            _, printed = quietly(commands.cmd_safe, make_demo())
+        self.assert_teaches(printed, "./kopi break")
+
+    def test_a_broken_boundary_never_teaches_success(self):
+        with mock.patch.object(commands.boto3, "client", return_value=fake_iam(set())):
+            _, printed = quietly(commands.cmd_safe, make_demo())
+        self.assertNotIn("Done: ", printed)
+
+    def test_break(self):
+        _, printed = quietly(commands.cmd_break, make_demo())
+        self.assert_teaches(printed, "./kopi observe")
+        self.assertIn("https://example.cloudfront.net/", printed)
+
+    def test_recover(self):
+        _, printed = Recover().recover(Recover().demo_with_history())
+        self.assert_teaches(printed, "./kopi reset")
+        self.assertIn("./kopi down", printed)
+
+    def test_observe_counts_the_receipts_it_really_has(self):
+        run = Observe().run_of()
+        run.tool_calls = [{"name": "kiosk___inspect_application"}] * 2
+        receipts = [{"tool": "inspect_application", "gateway_request_id": "g", "inputs": {}}] * 2
+        with (
+            mock.patch.object(commands, "ask_agent", return_value=run),
+            mock.patch.object(commands, "_receipts_between", return_value=receipts),
+        ):
+            _, printed = quietly(commands.cmd_observe, make_demo(broken=True))
+        self.assert_teaches(printed, "./kopi recover")
+        self.assertIn("2 tool calls, 2 receipts", printed)
+
+    def test_observe_never_claims_receipts_it_does_not_have(self):
+        run = Observe().run_of()
+        run.tool_calls = [{"name": "kiosk___inspect_application"}]
+        with (
+            mock.patch.object(commands, "ask_agent", return_value=run),
+            mock.patch.object(commands, "print_receipts", return_value=False),
+        ):
+            _, printed = quietly(commands.cmd_observe, make_demo(broken=True))
+        self.assertNotIn("receipts.", printed.split("Why it matters: ")[1].split("\n")[0])
+
+
 class FakeLogs:
     """CloudWatch Logs with this stack's agent log group, and another project's that must survive."""
 

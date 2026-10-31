@@ -170,7 +170,7 @@ COMMANDS = {
     "status": cmd_status,
     "up": cmd_up,
     "safe": commands.cmd_safe,
-    "break": lambda demo: demo.fault(),
+    "break": commands.cmd_break,
     "observe": commands.cmd_observe,
     "recover": commands.cmd_recover,
     "check": lambda demo: demo.check(),

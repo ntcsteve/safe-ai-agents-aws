@@ -306,7 +306,7 @@ resource "aws_bedrockagentcore_harness" "investigator" {
     }
   }
   system_prompt {
-    text = templatefile("${path.module}/investigator-prompt.md", { stalls = local.stall_list })
+    text = templatefile("${path.module}/investigator-prompt.md", { stalls = local.stall_list, title = local.scenario.title })
   }
   memory {
     disabled {} # each investigation starts clean; no carry-over between runs

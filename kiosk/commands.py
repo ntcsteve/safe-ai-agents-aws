@@ -36,6 +36,11 @@ class AgentUnavailable(RuntimeError):
 # --- Commands ---------------------------------------------------------------------------------
 
 
+def teach(done, why, next_step):
+    """How a journey step ends: people learn this by running it, so the terminal explains as it goes."""
+    print(f"\nDone: {done}\nWhy it matters: {why}\nNext: {next_step}")
+
+
 def cmd_safe(demo):
     """IAM's own evaluator on each role: the allowed control actions, and the denied writes."""
     outputs = demo.outputs
@@ -80,12 +85,27 @@ def cmd_safe(demo):
                 f"    {action:<40} {'ALLOWED' if allowed else 'DENIED'}"
                 f"{'' if allowed == should_allow else '   <-- UNEXPECTED'}"
             )
-    print(
-        "BOUNDARY HOLDS: nothing in the agent's path can write."
-        if held
-        else "BOUNDARY BROKEN: a role can do more than it should. Next: fix infra/, then ./kopi up"
+    if not held:
+        print("BOUNDARY BROKEN: a role can do more than it should. Next: fix infra/, then ./kopi up")
+        return 1
+    print("BOUNDARY HOLDS: nothing in the agent's path can write.")
+    teach(
+        "AWS's own IAM simulator checked every role the agent reaches.",
+        "the limit is in the policy, so it holds even if the agent misbehaves.",
+        "./kopi break",
     )
-    return 0 if held else 1
+    return 0
+
+
+def cmd_break(demo):
+    """The bad change. A person approved it, which is the point: approved changes can be wrong."""
+    code = demo.fault()
+    teach(
+        f"a bad change went live. Refresh {demo.outputs['url']} to see the wrong prices.",
+        "it was allowed and approved, so no permission would have stopped it.",
+        "./kopi observe",
+    )
+    return code
 
 
 def cmd_observe(demo):
@@ -99,11 +119,13 @@ def cmd_observe(demo):
         )
     except AgentUnavailable as error:
         print(error)
-        return _show_tool_results(demo)
+        code = _show_tool_results(demo)
+        teach("the same tools ran without the agent.", "the evidence never depended on the model.", "./kopi recover")
+        return code
     print(f"\n{run.text}\n")
     if not run.finished_normally:  # max tokens or iterations: never a silent short answer
         print(f"AGENT STOPPED EARLY: stop reason '{run.stop_reason}'. Next: ./kopi observe again")
-    print_receipts(demo.outputs, run)
+    has_every_receipt = print_receipts(demo.outputs, run)
     stall = demo.scenario["fault"]["stall"]
     key = menu.menu_key(stall)
     print(f"history   {key} (newest first)")
@@ -111,13 +133,21 @@ def cmd_observe(demo):
         print(line)
     print("check now", end=" ")
     demo.check()
+    calls = len(run.tool_calls)
+    why = f"{calls} tool calls, {calls} receipts. You can check what it did, not just what it said."
+    teach(
+        "the agent investigated and changed nothing.",
+        why if has_every_receipt else "the receipts above do not cover every call, and they name what is missing.",
+        "./kopi recover",
+    )
     return 0
 
 
 def print_receipts(outputs, run):
     """One receipt per tool call the run reports, matched by tool name. CloudWatch stores a receipt
     seconds after the call, so re-read until every call has one, for at most RECEIPT_WAIT_SECONDS;
-    then name what is still missing (INCOMPLETE) or what ran unreported (MISMATCH)."""
+    then name what is still missing (INCOMPLETE) or what ran unreported (MISMATCH).
+    True when every call has its receipt and nothing ran unreported."""
     deadline = time.monotonic() + RECEIPT_WAIT_SECONDS
     receipts = _receipts_between(outputs, run.started_at, run.ended_at)
     missing, unreported = _receipt_gaps(run.tool_calls, receipts)
@@ -144,6 +174,7 @@ def print_receipts(outputs, run):
             f"RECEIPTS MISMATCH: {', '.join(unreported)} has a receipt but no reported tool call. "
             "Next: trust the receipts, not the agent's list"
         )
+    return not missing and not unreported
 
 
 def cmd_recover(demo):
@@ -165,7 +196,12 @@ def cmd_recover(demo):
     demo.restore(key, chosen)
     code = demo.check()
     if code == 0:
-        print(f"RECOVERED: {key} restored. {_promo_line(demo.scenario)}.")
+        print(f"RECOVERED: {key} restored.")
+        teach(
+            "you approved it, and only that one menu changed.",
+            f"{_promo_line(demo.scenario)}: the fix was the size of the mistake.",
+            "./kopi reset to run it again, or ./kopi down to finish, because this stack costs money",
+        )
     return code
 
 

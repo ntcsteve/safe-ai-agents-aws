@@ -8,7 +8,7 @@ from botocore.exceptions import ClientError
 from kiosk import menu
 
 LOG_KEY = "changes/maintenance-log.json"
-# Short browser and edge cache, so phones see a rollback within seconds (see infra cache policy).
+# Short browser and edge cache, so browsers see a restore within seconds (see infra cache policy).
 MENU_CACHE_CONTROL = "max-age=2"
 
 
