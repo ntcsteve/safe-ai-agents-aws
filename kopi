@@ -99,7 +99,8 @@ def cmd_up(demo):
 
 def cmd_down(demo):
     _terraform("destroy", *demo.settings.terraform_vars())
-    print("DOWN: everything Terraform created is deleted.")
+    removed = commands.delete_agent_logs(demo.settings.region)
+    print(f"DOWN: everything is deleted, including {removed} agent log group(s) Terraform did not create.")
 
 
 COMMANDS = {

@@ -7,6 +7,7 @@ import importlib.util
 import io
 import json
 import pathlib
+import subprocess
 import types
 import unittest
 from unittest import mock
@@ -142,6 +143,53 @@ class Up(unittest.TestCase):
         result, _, terraform, _, _ = self.up(side_effect=refusal)
         self.assertIs(result, refusal)
         terraform.assert_not_called()
+
+
+class FakeLogs:
+    """CloudWatch Logs with this stack's agent log group, and another project's that must survive."""
+
+    def __init__(self):
+        self.groups = [
+            "/aws/bedrock-agentcore/runtimes/harness_kopi_investigator-KA9qrF7K2g-DEFAULT",
+            "/aws/bedrock-agentcore/runtimes/harness_acd_kopi_investigator-64pB0j42l6-DEFAULT",
+        ]
+
+    def describe_log_groups(self, logGroupNamePrefix, limit):
+        return {"logGroups": [{"logGroupName": g} for g in self.groups if g.startswith(logGroupNamePrefix)][:limit]}
+
+    def delete_log_group(self, logGroupName):
+        self.groups.remove(logGroupName)
+
+
+class Down(unittest.TestCase):
+    def down(self, **terraform):
+        logs = FakeLogs()
+        with (
+            mock.patch.object(KOPI, "_terraform", **terraform),
+            mock.patch.object(commands.boto3, "client", return_value=logs),
+        ):
+            result, printed = quietly(KOPI.cmd_down, make_demo())
+        return result, printed, logs
+
+    def test_removes_the_log_group_agentcore_created_and_nothing_else(self):
+        _, printed, logs = self.down()
+        self.assertEqual(len(logs.groups), 1)
+        self.assertIn("harness_acd_kopi_investigator", logs.groups[0])
+        self.assertIn("1 agent log group(s)", printed)
+
+    def test_running_it_twice_is_safe(self):
+        logs = FakeLogs()
+        with mock.patch.object(KOPI, "_terraform"), mock.patch.object(commands.boto3, "client", return_value=logs):
+            quietly(KOPI.cmd_down, make_demo())
+            result, printed = quietly(KOPI.cmd_down, make_demo())
+        self.assertEqual(result, None)
+        self.assertIn("0 agent log group(s)", printed)
+
+    def test_a_cancelled_destroy_leaves_the_logs_alone(self):
+        cancelled = subprocess.CalledProcessError(1, "terraform")
+        result, _, logs = self.down(side_effect=cancelled)
+        self.assertIs(result, cancelled)
+        self.assertEqual(len(logs.groups), 2)
 
 
 class Break(unittest.TestCase):

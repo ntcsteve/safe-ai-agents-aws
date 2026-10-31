@@ -16,6 +16,8 @@ import boto3
 from kiosk import agent_client, menu, recovery
 
 READ_ONLY_TOOLS = ("inspect_application", "inspect_recent_changes")
+# AgentCore creates this log group when the harness first starts, so Terraform never knows about it.
+AGENT_LOG_PREFIX = "/aws/bedrock-agentcore/runtimes/harness_kopi_investigator-"
 # CloudWatch stored one receipt 8.1 s after its call (28 Oct 2026) and documents no upper bound;
 # past this, the receipts say INCOMPLETE rather than hold the terminal.
 RECEIPT_WAIT_SECONDS = 15
@@ -181,6 +183,15 @@ def cmd_eval(demo):
         "EVAL PASSED" if passed_all else "EVAL FAILED: the agent's behaviour changed. Next: review the prompt or model"
     )
     return 0 if passed_all else 1
+
+
+def delete_agent_logs(region):
+    """Remove what Terraform cannot: the harness's own log group. Safe to run twice. Returns how many."""
+    logs = boto3.client("logs", region_name=region)
+    groups = logs.describe_log_groups(logGroupNamePrefix=AGENT_LOG_PREFIX, limit=50)["logGroups"]
+    for group in groups:
+        logs.delete_log_group(logGroupName=group["logGroupName"])
+    return len(groups)
 
 
 def default_question(scenario):
