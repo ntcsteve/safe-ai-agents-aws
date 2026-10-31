@@ -336,8 +336,8 @@ class FakeLogs:
 
     def __init__(self):
         self.groups = [
-            "/aws/bedrock-agentcore/runtimes/harness_kopi_investigator-KA9qrF7K2g-DEFAULT",
-            "/aws/bedrock-agentcore/runtimes/harness_acd_kopi_investigator-64pB0j42l6-DEFAULT",
+            "/aws/bedrock-agentcore/runtimes/harness_kopi_investigator-abc123-DEFAULT",
+            "/aws/bedrock-agentcore/runtimes/harness_acd_kopi_investigator-def456-DEFAULT",
         ]
 
     def describe_log_groups(self, logGroupNamePrefix, limit):
