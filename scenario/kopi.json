@@ -74,5 +74,21 @@
     "stall": "seduh",
     "item": "kopi-flight",
     "price": 36000
+  },
+  "images": {
+    "hero": "hero.jpg",
+    "stalls": {
+      "kopi": "kopi-corner.jpg",
+      "seduh": "kopi-seduh.jpg"
+    },
+    "items": {
+      "kopi-susu": "kopi-susu.jpg",
+      "kopi-hitam": "kopi-hitam.jpg",
+      "es-kopi-gula-aren": "es-kopi-gula-aren.jpg",
+      "teh-tarik": "teh-tarik.jpg",
+      "v60": "v60.jpg",
+      "long-black": "long-black.jpg",
+      "kopi-flight": "kopi-flight.jpg"
+    }
   }
 }

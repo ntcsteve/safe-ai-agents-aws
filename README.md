@@ -65,7 +65,8 @@ together. CloudFront is not in that figure. Your bill may differ, so run `./kopi
 ```
 
 It checks your setup, then shows the account and region it will use, then Terraform's plan. Check the
-account, then type `yes`. It ends with `HEALTHY` and a URL. Open the URL: every price is correct.
+account, then type `yes`. It ends with `HEALTHY` and a URL. Open the URL, on a phone if you can. Every price is
+correct. Add something to your order.
 
 **2. Safe: can the agent touch the data?**
 
@@ -83,7 +84,8 @@ call being refused.
 ./kopi break
 ```
 
-A change that was approved, and wrong: three prices go up 100 times. Refresh the page and they are marked.
+A change that was approved, and wrong: three prices go up 100 times. Within seconds the page shows it, and your
+order total jumps.
 The clock starts against a 10-minute tolerance.
 
 **4. Observable: what happened, and what did the agent do?**
@@ -176,7 +178,7 @@ kiosk/recovery.py    which version to restore, and the scope gate
 kiosk/commands.py    safe, break, observe, recover, eval
 kiosk/s3_store.py, agent_client.py, tool_lambda.py, preflight.py, config.py   the edges
 infra/               AWS, in Terraform. investigator-prompt.md is the agent's instructions
-site/                the menu page
+site/                the menu page. incident.js is its states: LIVE, CHANGED, RESTORED
 tests/               what ./check runs
 ```
 
@@ -199,4 +201,5 @@ Tested on 31 October 2026 in one AWS account, in `ap-southeast-2`, with Terrafor
 and `au.anthropic.claude-sonnet-4-6`. Never yet tested in a brand-new account.
 
 This is a personal learning project, offered as is, with no support. It is not an official AWS or Commvault
-product. Apache-2.0: see [LICENSE](LICENSE).
+product. Apache-2.0: see [LICENSE](LICENSE). Photos and font keep their own licences: see
+[site/img/CREDITS.md](site/img/CREDITS.md).

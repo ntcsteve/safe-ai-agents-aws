@@ -47,6 +47,8 @@ def load_scenario(raw):
     _validate_stalls(raw["stalls"])
     _validate_fault(raw["fault"], raw["stalls"])
     _validate_promo(raw["promo"], raw["fault"], raw["stalls"])
+    if "images" in raw:
+        _validate_images(raw["images"], raw["stalls"])
     return raw
 
 
@@ -94,6 +96,17 @@ def _validate_promo(promo, fault, stalls):
     if promo.get("item") not in _item_ids(stall):
         raise ScenarioError(f"promo.item '{promo.get('item')}' is not on stall '{promo['stall']}'")
     _require_price(promo.get("price"), "promo.price")
+
+
+def _validate_images(images, stalls):
+    """Optional, presentation-only: file names under site/img/, keyed by stall and item."""
+    for stall_id in images.get("stalls", {}):
+        if stall_id not in stalls:
+            raise ScenarioError(f"images.stalls names '{stall_id}', which is not a stall")
+    all_items = set().union(*(_item_ids(stall) for stall in stalls.values()))
+    for item_id in images.get("items", {}):
+        if item_id not in all_items:
+            raise ScenarioError(f"images.items names '{item_id}', which is not on any stall")
 
 
 # --- Changes --------------------------------------------------------------------------------

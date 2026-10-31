@@ -9,11 +9,17 @@ locals {
   # hash because S3 holds a deleted bucket's name for a while: a Region move must never reuse one.
   bucket = "kopi-${substr(sha1("${data.aws_caller_identity.me.account_id}/${var.region}"), 0, 10)}"
   site_files = {
-    "site/index.html" = "text/html; charset=utf-8"
-    "site/app.js"     = "text/javascript; charset=utf-8"
-    "site/price.js"   = "text/javascript; charset=utf-8"
+    "site/index.html"  = "text/html; charset=utf-8"
+    "site/app.js"      = "text/javascript; charset=utf-8"
+    "site/price.js"    = "text/javascript; charset=utf-8"
+    "site/incident.js" = "text/javascript; charset=utf-8"
   }
-  promo = local.scenario.promo
+  images = try(local.scenario.images, {})
+  promo  = local.scenario.promo
+  fonts = {
+    "young-serif-latin.woff2" = "font/woff2"
+    "OFL.txt"                 = "text/plain; charset=utf-8"
+  }
 }
 
 # --- Bucket -----------------------------------------------------------------------------------
@@ -75,8 +81,28 @@ resource "aws_s3_object" "site" {
   cache_control = "max-age=5"
 }
 
-# What the page needs from the scenario: title, stalls in order, promo, and the expected
-# prices. Presentation stays out of the menu objects, so the agent and the rollback deal
+resource "aws_s3_object" "images" {
+  for_each      = fileset("${path.module}/../site/img", "*.jpg")
+  bucket        = aws_s3_bucket.menus.id
+  key           = "site/img/${each.value}"
+  source        = "${path.module}/../site/img/${each.value}"
+  etag          = filemd5("${path.module}/../site/img/${each.value}")
+  content_type  = "image/jpeg"
+  cache_control = "max-age=86400"
+}
+
+resource "aws_s3_object" "fonts" {
+  for_each      = local.fonts
+  bucket        = aws_s3_bucket.menus.id
+  key           = "site/fonts/${each.key}"
+  source        = "${path.module}/../site/fonts/${each.key}"
+  etag          = filemd5("${path.module}/../site/fonts/${each.key}")
+  content_type  = each.value
+  cache_control = "max-age=86400"
+}
+
+# What the page needs from the scenario: title, stalls in order, images, promo, and the
+# expected prices. Presentation stays out of the menu objects, so the agent and the rollback deal
 # in prices only. The page shows the promo badge only while the promo price is live in the menu.
 resource "aws_s3_object" "site_config" {
   bucket        = aws_s3_bucket.menus.id
@@ -93,6 +119,11 @@ resource "aws_s3_object" "site_config" {
         { for item in stall.items : item.id => item.price },
         id == local.promo.stall ? { (local.promo.item) = local.promo.price } : {}
       )
+    }
+    images = {
+      hero   = try("/site/img/${local.images.hero}", "")
+      stalls = { for id, file in try(local.images.stalls, {}) : id => "/site/img/${file}" }
+      items  = { for id, file in try(local.images.items, {}) : id => "/site/img/${file}" }
     }
     promo = {
       item       = local.promo.item

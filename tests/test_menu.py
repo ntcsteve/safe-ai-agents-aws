@@ -76,6 +76,38 @@ class ScenarioTolerance(unittest.TestCase):
                 menu.load_scenario(raw)
 
 
+class ScenarioImages(unittest.TestCase):
+    """Images are optional and presentation-only; a broken reference is caught before deploy."""
+
+    def test_scenario_without_images_loads(self):
+        raw = raw_scenario()
+        del raw["images"]
+        menu.load_scenario(raw)
+
+    def test_every_shipped_image_file_exists(self):
+        images = menu.load_scenario(raw_scenario())["images"]
+        site = SCENARIO_PATH.parent.parent / "site" / "img"
+        files = [images["hero"], *images["stalls"].values(), *images["items"].values()]
+        self.assertEqual([f for f in files if not (site / f).is_file()], [])
+
+    def test_image_for_unknown_item_is_named(self):
+        raw = raw_scenario()
+        raw["images"]["items"]["latte"] = "latte.jpg"
+        with self.assertRaisesRegex(menu.ScenarioError, r"images\.items.*latte"):
+            menu.load_scenario(raw)
+
+    def test_image_for_unknown_stall_is_named(self):
+        raw = raw_scenario()
+        raw["images"]["stalls"]["bakso"] = "bakso.jpg"
+        with self.assertRaisesRegex(menu.ScenarioError, r"images\.stalls.*bakso"):
+            menu.load_scenario(raw)
+
+    def test_images_never_enter_menu_objects(self):
+        # The agent and the rollback reason about prices only.
+        kopi = menu.seed_menus(menu.load_scenario(raw_scenario()))["menus/stall-kopi.json"]
+        self.assertNotIn("image", kopi["items"][0])
+
+
 class BuildMenus(unittest.TestCase):
     def setUp(self):
         self.scenario = menu.load_scenario(raw_scenario())

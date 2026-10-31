@@ -112,7 +112,7 @@ def cmd_break(demo):
     """The bad change. A person approved it, which is the point: approved changes can be wrong."""
     code = demo.fault()
     teach(
-        f"a bad change went live. Refresh {demo.outputs['url']} to see the wrong prices.",
+        f"a bad change went live. See it at {demo.outputs['url']}",
         "it was allowed and approved, so no permission would have stopped it.",
         "./kopi observe",
     )
