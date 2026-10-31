@@ -12,7 +12,7 @@ import types
 import unittest
 from unittest import mock
 
-from kiosk import commands, config, menu
+from kiosk import commands, config, menu, states
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SETTINGS = config.Config(region="ap-southeast-2", model="au.anthropic.claude-sonnet-4-6", scenario="kopi")
@@ -25,6 +25,8 @@ OUTPUTS = {
     "investigator_harness_arn": "arn:aws:bedrock-agentcore:ap-southeast-2:000000000000:harness/kopi",
     "tools_function": "kopi-tools",
     "url": "https://example.cloudfront.net/",
+    "model": "au.anthropic.claude-sonnet-4-6",
+    "scenario": "kopi",
 }
 
 
@@ -66,7 +68,7 @@ class FakeStore:
 def make_demo(broken=False):
     demo = KOPI.Demo(SETTINGS, KOPI._load_scenario("kopi"))
     demo.__dict__["store"] = FakeStore(demo.scenario)  # cached_property: the fake stands in for S3
-    demo.__dict__["outputs"] = OUTPUTS
+    demo.__dict__["deployed"] = OUTPUTS
     if broken:
         demo.store.menus = menu.apply_fault(demo.store.menus, demo.scenario)
     return demo
@@ -121,28 +123,76 @@ class Safe(unittest.TestCase):
 
 
 class Up(unittest.TestCase):
-    def up(self, **check):
+    def up(self, before=states.State.NOT_DEPLOYED, **check):
+        check = check or {"return_value": "account ********3333, region ap-southeast-2"}
         with (
-            mock.patch.object(KOPI.preflight, "check", **check) as preflight_check,
+            mock.patch.object(KOPI.preflight, "check", **check),
             mock.patch.object(KOPI, "_terraform") as terraform,
+            mock.patch.object(KOPI.Demo, "state", return_value=before),
+            mock.patch.object(KOPI.Demo, "forget_deployed"),  # the fakes stand in for what up would re-read
         ):
             demo = make_demo(broken=True)
             result, printed = quietly(KOPI.cmd_up, demo)
-        return result, printed, terraform, preflight_check, demo
+        return result, printed, terraform, demo
 
     def test_shows_the_target_deploys_then_seeds_healthy_menus(self):
-        _, printed, terraform, _, demo = self.up(return_value="account ********3333, region ap-southeast-2")
+        _, printed, terraform, demo = self.up()
         self.assertIn("Target: account ********3333, region ap-southeast-2", printed)
         self.assertEqual([call.args[0] for call in terraform.call_args_list], ["init", "apply"])
         self.assertIn("HEALTHY", printed)
         self.assertIn("Next: ./kopi safe", printed)
         self.assertEqual([entry["change_id"] for entry in demo.store.log["changes"]], ["PROMO-7"])
 
+    def test_a_changed_config_reseeds(self):
+        _, printed, _, _ = self.up(before=states.State.CONFIG_NOT_APPLIED)
+        self.assertIn("RESET", printed)
+
+    def test_rerunning_mid_run_leaves_a_broken_menu_broken(self):
+        _, printed, _, demo = self.up(before=states.State.BROKEN)
+        self.assertNotIn("RESET", printed)
+        self.assertIn("BROKEN", printed)
+        self.assertEqual(demo.store.log["changes"], [])
+
     def test_a_failed_preflight_creates_nothing(self):
         refusal = KOPI.preflight.PreflightFailed("no working AWS credentials")
-        result, _, terraform, _, _ = self.up(side_effect=refusal)
+        result, _, terraform, _ = self.up(side_effect=refusal)
         self.assertIs(result, refusal)
         terraform.assert_not_called()
+
+
+class Status(unittest.TestCase):
+    def status(self, demo, state):
+        with mock.patch.object(KOPI.Demo, "state", return_value=state):
+            return quietly(KOPI.cmd_status, demo)
+
+    def test_running_shows_the_menus_state_and_the_next_step(self):
+        _, printed = self.status(make_demo(broken=True), states.State.BROKEN)
+        self.assertIn("State: BROKEN", printed)
+        self.assertIn("Next:  ./kopi observe", printed)
+
+    def test_not_deployed_never_reads_the_menus(self):
+        demo = make_demo()
+        demo.__dict__["store"] = None
+        _, printed = self.status(demo, states.State.NOT_DEPLOYED)
+        self.assertIn("State: NOT DEPLOYED", printed)
+        self.assertIn("Next:  ./kopi up", printed)
+
+
+class Gate(unittest.TestCase):
+    def test_a_command_refused_by_the_table_touches_nothing(self):
+        observe = mock.Mock(return_value=0)
+        with (
+            mock.patch.object(KOPI, "_load_config", return_value=SETTINGS),
+            mock.patch.object(KOPI.Demo, "state", return_value=states.State.HEALTHY),
+            mock.patch.dict(KOPI.COMMANDS, {"observe": observe}),
+        ):
+            result, printed = quietly(KOPI.main, ["kopi", "observe"])
+        self.assertEqual(result, 2)
+        self.assertIn("Next: ./kopi break", printed)
+        observe.assert_not_called()
+
+    def test_every_command_in_the_table_exists(self):
+        self.assertLessEqual(set(KOPI.COMMANDS), set(states.ALLOWED))
 
 
 class FakeLogs:
@@ -184,6 +234,18 @@ class Down(unittest.TestCase):
             result, printed = quietly(KOPI.cmd_down, make_demo())
         self.assertEqual(result, None)
         self.assertIn("0 agent log group(s)", printed)
+
+    def test_destroys_what_is_deployed_even_after_config_env_changed(self):
+        demo = make_demo()
+        demo.settings = config.Config(region="us-east-1", model="other", scenario="books")
+        with (
+            mock.patch.object(KOPI, "_terraform") as terraform,
+            mock.patch.object(commands.boto3, "client", return_value=FakeLogs()) as client,
+        ):
+            quietly(KOPI.cmd_down, demo)
+        self.assertIn("-var=region=ap-southeast-2", terraform.call_args.args)
+        self.assertIn("-var=model=au.anthropic.claude-sonnet-4-6", terraform.call_args.args)
+        client.assert_called_once_with("logs", region_name="ap-southeast-2")
 
     def test_a_cancelled_destroy_leaves_the_logs_alone(self):
         cancelled = subprocess.CalledProcessError(1, "terraform")

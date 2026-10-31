@@ -5,6 +5,7 @@
 # ///
 """Kopi Kiosk. Every command prints one named state and the next step. See README.md.
 
+./kopi           where you are, and what to run next
 ./kopi up        deploy, or apply a changed config or scenario
 ./kopi safe      prove nothing in the agent's path can write
 ./kopi break     apply the bad change
@@ -17,6 +18,7 @@
 
 import datetime
 import functools
+import hashlib
 import json
 import pathlib
 import subprocess
@@ -27,7 +29,7 @@ sys.path.insert(0, str(ROOT))
 
 from botocore.exceptions import BotoCoreError, ClientError  # noqa: E402
 
-from kiosk import commands, config, menu, preflight, recovery  # noqa: E402
+from kiosk import commands, config, menu, preflight, recovery, states  # noqa: E402
 from kiosk.s3_store import MenuStore  # noqa: E402
 
 INFRA = ROOT / "infra"
@@ -45,12 +47,44 @@ class Demo:
         self.scenario = scenario
 
     @functools.cached_property
-    def outputs(self):
-        result = subprocess.run(["terraform", f"-chdir={INFRA}", "output", "-json"], capture_output=True, text=True)
+    def deployed(self):
+        """Terraform's outputs, or None when nothing is deployed."""
+        try:
+            result = subprocess.run(["terraform", f"-chdir={INFRA}", "output", "-json"], capture_output=True, text=True)
+        except FileNotFoundError:  # no Terraform yet: ./kopi up's preflight names the fix
+            return None
         outputs = json.loads(result.stdout or "{}") if result.returncode == 0 else {}
-        if "bucket" not in outputs:
-            raise NotDeployed("NOT DEPLOYED: no Terraform outputs in infra/. Next: ./kopi up")
-        return {name: value["value"] for name, value in outputs.items()}
+        return {name: value["value"] for name, value in outputs.items()} if "bucket" in outputs else None
+
+    @property
+    def outputs(self):
+        if self.deployed is None:
+            raise NotDeployed(f"NOT DEPLOYED. Next: {states.NEXT[states.State.NOT_DEPLOYED]}")
+        return self.deployed
+
+    def forget_deployed(self):
+        for cached in ("deployed", "store"):
+            self.__dict__.pop(cached, None)
+
+    def state(self):
+        return states.read_state(self.deployed, self.settings, self.file_hashes(), self.is_healthy)
+
+    def file_hashes(self):
+        scenario = ROOT / "scenario" / f"{self.settings.scenario}.json"
+        files = {"scenario_hash": scenario, "prompt_hash": INFRA / "investigator-prompt.md"}
+        return {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in files.items()}
+
+    def is_healthy(self):
+        return menu.check_menus(self.store.read_menus(self.scenario), self.scenario).state is menu.Health.HEALTHY
+
+    def refusal_for(self, command, state):
+        if state is states.State.REGION_CHANGED:
+            detail = f"deployed in {self.deployed['region']}, config.env says {self.settings.region}"
+        elif state is states.State.CONFIG_NOT_APPLIED:
+            detail = ", ".join(states.differences(self.deployed, self.settings, self.file_hashes()))
+        else:
+            detail = ""
+        return states.refusal(command, state, detail)
 
     @functools.cached_property
     def store(self):
@@ -91,19 +125,40 @@ class Demo:
 
 def cmd_up(demo):
     print(f"Target: {preflight.check(demo.settings)}", flush=True)  # before Terraform writes to the same stream
+    before = demo.state()
     _terraform("init", "-input=false", "-lockfile=readonly")  # the tested providers, never newer ones
     _terraform("apply", *demo.settings.terraform_vars())  # shows the plan and asks before it creates anything
-    demo.reset()
+    demo.forget_deployed()
+    # Only a new or changed stack needs seeding. Rerunning up mid-run leaves a broken menu broken.
+    if before in states.RUNNING:
+        demo.check()
+    else:
+        demo.reset()
     print(f"UP: {demo.outputs['url']}\nNext: ./kopi safe. When finished: ./kopi down, because this costs money")
 
 
 def cmd_down(demo):
-    _terraform("destroy", *demo.settings.terraform_vars())
-    removed = commands.delete_agent_logs(demo.settings.region)
+    # What is deployed, not what config.env says now: after an edit, the new values would miss the stack.
+    live = demo.deployed
+    settings = config.Config(live["region"], live["model"], live["scenario"]) if live else demo.settings
+    _terraform("destroy", *settings.terraform_vars())
+    demo.forget_deployed()
+    removed = commands.delete_agent_logs(settings.region)
     print(f"DOWN: everything is deleted, including {removed} agent log group(s) Terraform did not create.")
 
 
+def cmd_status(demo):
+    state = demo.state()
+    if state in states.RUNNING:
+        print("State: ", end="")
+        demo.check()
+    else:
+        print(f"State: {state}")
+    print(f"Next:  {states.NEXT[state]}")
+
+
 COMMANDS = {
+    "status": cmd_status,
     "up": cmd_up,
     "safe": commands.cmd_safe,
     "break": lambda demo: demo.fault(),
@@ -146,13 +201,18 @@ def _terraform(*args):
 
 
 def main(argv):
-    name = argv[1] if len(argv) > 1 else ""
+    name = argv[1] if len(argv) > 1 else "status"
     if name not in COMMANDS:
         print(__doc__)
         return 2
     try:
         settings = _load_config()
-        return COMMANDS[name](Demo(settings, _load_scenario(settings.scenario))) or 0
+        demo = Demo(settings, _load_scenario(settings.scenario))
+        state = demo.state()
+        if state not in states.ALLOWED[name]:
+            print(demo.refusal_for(name, state))
+            return 2
+        return COMMANDS[name](demo) or 0
     except config.ConfigInvalid as error:
         print(f"CONFIG INVALID: {error}. Next: fix config.env")
     except menu.ScenarioError as error:
