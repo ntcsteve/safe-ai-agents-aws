@@ -76,6 +76,10 @@ class Refused(unittest.TestCase):
     def test_model_id_wrong(self):
         self.assert_refused("MODEL", "config.env", model_error=denied("ValidationException", "invalid model"))
 
+    def test_the_anthropic_form_not_filled_points_at_the_form(self):
+        """Bedrock answers 404 until an account submits Anthropic's use case details. MODEL alone would mislead."""
+        self.assert_refused("Anthropic use case form", model_error=denied("ResourceNotFoundException", "not submitted"))
+
     def test_model_access_not_granted(self):
         self.assert_refused("Bedrock", "access", model_error=denied("AccessDeniedException", "no access"))
 

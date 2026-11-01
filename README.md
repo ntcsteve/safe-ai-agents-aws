@@ -56,7 +56,8 @@ may differ, so run `./kopi down` when you finish.
 
 - macOS or Linux. Only macOS has been tested. On Windows, use WSL, also untested.
 - A test AWS account, with credentials for an administrator role in your terminal.
-- Access to Claude in Amazon Bedrock in `ap-southeast-2`. `./kopi up` checks this first.
+- Access to Claude in Amazon Bedrock in `ap-southeast-2`. `./kopi up` checks this first. Anthropic asks for a use case
+  form once per account: pick a Claude model in the Bedrock console to submit it.
 - [Terraform](https://developer.hashicorp.com/terraform/install) 1.10 or newer.
 - [uv](https://docs.astral.sh/uv/getting-started/installation/), which runs `./kopi` and installs its Python packages.
 
@@ -139,7 +140,7 @@ Every command names its state and what to do next. `./kopi` shows them at any ti
 | `REGION CHANGED` | `config.env` names a different region from the stack | `./kopi down`, then `./kopi up` |
 | `NOT NOW` | That command does not fit the current state | Follow its `Next:` |
 | `AGENT UNAVAILABLE` | The model or harness failed | `observe` shows the same evidence without the agent |
-| `RECEIPTS INCOMPLETE` | CloudWatch has not stored them all yet | `./kopi observe` in a minute |
+| `RECEIPTS INCOMPLETE` | CloudWatch has not stored them all yet | Check CloudWatch, or `./kopi observe` for a new run |
 | `RECEIPTS MISMATCH` | A tool ran that the agent did not report | Trust the receipts |
 | `AGENT CHANGED DATA` | S3 changed while the agent ran. This should be impossible | `./kopi reset`, then find out what wrote it |
 | `NO GOOD VERSION` | No healthy version in the recent history | `./kopi reset` |
@@ -172,12 +173,13 @@ A wrong `MODEL` is refused before anything is created.
 
 ## Going further
 
-**Why S3 versions alone are not enough.** `./kopi recover` restores from S3 versions, which is simple and works here. But those versions live in the
-same bucket and the same account as the data. Anyone with delete rights can remove them, so this protects
-you from a bad change, not from a stolen credential or a deleted bucket.
+**Why S3 versions alone are not enough.** `./kopi recover` restores from S3 versions, which is simple and works here.
+But those versions live in the same bucket and the same account as the data. Anyone with delete rights can remove
+them, so this protects you from a bad change, not from a stolen credential or a deleted bucket.
 
-Want to try a managed way back? The optional [Clumio add-on](addons/clumio/README.md) adds Backtrack, with a daily
-copy outside your account. For real data, see [Get started with Clumio on AWS](https://github.com/ntcsteve/get-started-clumio-aws).
+Want to try a managed way back? The optional [Clumio add-on](addons/clumio/README.md) adds Backtrack. Backtrack uses
+these same versions, so it does not solve this. Its daily copy outside your account does, and this demo never restores
+from that copy. For real data, see [Get started with Clumio on AWS](https://github.com/ntcsteve/get-started-clumio-aws).
 
 ## Project layout
 
@@ -193,7 +195,7 @@ kiosk/commands.py    safe, break, observe, recover, eval
 kiosk/s3_store.py, agent_client.py, tool_lambda.py, preflight.py, config.py   the edges
 infra/               AWS, in Terraform. investigator-prompt.md is the agent's instructions
 site/                the menu page. incident.js is its states: LIVE, CHANGED, RESTORED
-addons/clumio/       optional. Everything Clumio. Delete it and the demo still works
+addons/clumio/       optional. Everything Clumio. Run ./kopi down before you delete it
 tests/               what ./check runs
 ```
 
@@ -212,11 +214,11 @@ tests/               what ./check runs
 
 ## Status and license
 
-The AWS demo was tested on 31 October 2026 on macOS, in one AWS account, in `ap-southeast-2`, with Terraform 1.15,
-AWS provider 6.70.0 and `au.anthropic.claude-sonnet-4-6`. It has never been tested in a brand-new account.
+Last tested on 1 November 2026 on macOS, in one AWS account, in `ap-southeast-2`, with Terraform 1.15, AWS provider
+6.70.0 and `au.anthropic.claude-sonnet-4-6`. That covered the full walk through, the Clumio add-on's connect and
+rollback, and removal, including after a connect that stopped partway. It has never been tested in a brand-new account.
 
-The Clumio add-on was tested on 1 November 2026 in the same account: first connect, rollback and removal. A blank
-`CLUMIO_OU_ID` and the `CLUMIO POINT BAD` refusal have only been tested in code.
+A blank `CLUMIO_OU_ID` and the `CLUMIO POINT BAD` refusal have only been tested in code.
 
 This is a personal learning project, offered as is, with no support. It is not an official AWS or Commvault
 product. Apache-2.0: see [LICENSE](LICENSE). Photos and font keep their own licences: see

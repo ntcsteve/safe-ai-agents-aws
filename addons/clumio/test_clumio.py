@@ -368,6 +368,11 @@ class Disconnect(unittest.TestCase):
                 _, _, terraform = self.disconnect()
                 self.assertIn(expected, terraform.call_args.args)
 
+    def test_says_what_outlives_the_disconnect(self):
+        """./kopi down must not read as everything gone: SecureVault copies stay until their retention ends."""
+        _, printed, _ = self.disconnect()
+        self.assertIn("SecureVault copies stay", printed)
+
     def test_a_failed_disconnect_stops_down_without_guessing_why(self):
         result, _, _ = self.disconnect(side_effect=subprocess.CalledProcessError(1, "terraform"))
         self.assertIsInstance(result, recovery.RecoveryRefused)

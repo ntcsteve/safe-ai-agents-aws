@@ -99,7 +99,7 @@ class Receipts(unittest.TestCase):
         self.assertIn("Waiting for 2 receipts...", printed)
         self.assertIn("RECEIPTS INCOMPLETE: 1 of 3 tool calls have a receipt", printed)
         self.assertIn("missing inspect_application, inspect_recent_changes", printed)
-        self.assertIn("Next: ./kopi observe in a minute", printed)
+        self.assertIn("Next: ./kopi observe starts a new run with its own receipts", printed)
 
     def test_receipt_for_no_reported_call_is_a_mismatch(self):
         """A tool ran that the agent did not report: the receipts, not the agent's words, are the record."""

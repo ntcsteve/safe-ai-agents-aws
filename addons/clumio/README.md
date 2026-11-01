@@ -1,10 +1,11 @@
 # Clumio add-on
 
 Optional. Finish the main [README](../../README.md) first. This adds a second way to recover, using
-[Clumio](https://clumio.com) Backtrack. Delete this folder and the AWS demo still works.
+[Clumio](https://clumio.com) Backtrack. If you never connected it, delete this folder and the AWS demo still works. If
+you did, run `./kopi down` first, because this folder holds the only record of what to remove.
 
-**Allow for a wait.** Backtrack rolls back to a sync. In our test the first sync ran 5 minutes after connecting, but
-allow up to a day.
+**Allow for a wait.** Backtrack rolls back to a sync. In our tests the first sync ran within 5 minutes of connecting,
+but allow up to a day.
 
 ## What it adds
 
@@ -26,7 +27,12 @@ immutable storage, and that is what survives a stolen credential. This demo neve
 - An API token, from the Clumio console under Administration, Access management, API tokens.
 - Your API URL, which depends on your portal. See the [table of URLs](https://github.com/ntcsteve/get-started-clumio-aws#before-you-begin).
 
-Clumio bills for what it protects. Run `./kopi down` when you finish.
+**Use a test account.** Connecting creates IAM roles that let Clumio read, write and delete objects in every S3 bucket
+in the account, not only the menus bucket. A rollback needs write access. So "only you can write" in the main README
+stops being true once this add-on is connected.
+
+Clumio bills for what it protects. Run `./kopi down` when you finish. SecureVault copies stay until their 30-day
+retention ends, so check how your Clumio plan bills them.
 
 ## Set it up
 
@@ -42,7 +48,8 @@ cp addons/clumio/clumio.env.example addons/clumio/clumio.env
 | `CLUMIO_API_BASE_URL` | Your portal's API URL |
 | `CLUMIO_OU_ID` | Optional. Leave blank unless your tenant uses organizational units |
 
-Any other key is refused, so this file can never change which AWS account a run uses. Do not use shell exports or
+Values are read as plain text, so `$(...)` is not run. Any other key is refused, so this file can never change which
+AWS account a run uses. Do not use shell exports or
 a `terraform.tfvars`: `./kopi` reads this file and nothing else.
 
 ## Run it
@@ -69,7 +76,7 @@ a sync taken while a menu is broken captures the bad change.
 
 It previews the one object, then asks for `ROLL BACK`. Clumio took about 2 minutes in our test.
 
-**4. Remove everything**
+**4. Remove it**
 
 ```
 ./kopi down

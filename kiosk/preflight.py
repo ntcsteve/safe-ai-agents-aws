@@ -45,7 +45,8 @@ def _require_model(settings, client):
                 "Next: request model access in the Bedrock console"
             ) from None
         raise PreflightFailed(
-            f"{settings.model} cannot be used in {settings.region} ({_masked(error)}). Next: fix MODEL in config.env"
+            f"{settings.model} cannot be used in {settings.region} ({_masked(error)}). "
+            "Next: fix MODEL in config.env. New to Claude on Bedrock? Submit the Anthropic use case form in its console"
         ) from None
     except BotoCoreError as error:
         raise PreflightFailed(f"could not reach Bedrock ({_masked(error)}). Next: check your network") from None

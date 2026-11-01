@@ -13,7 +13,7 @@
 ./kopi recover   preview, type ROLL BACK, restore the one bad menu. Add --clumio to use Clumio
 ./kopi check     HEALTHY or BROKEN (exit 0 or 1)
 ./kopi reset     good menus, the promo live
-./kopi down      remove everything
+./kopi down      remove the demo from AWS
 ./kopi clumio    optional: connect Clumio. See addons/clumio/README.md
 ./kopi eval      three scripted agent checks, for prompt or model changes
 """
@@ -150,7 +150,7 @@ def cmd_down():
         addon.disconnect()
     _terraform("destroy", *settings.terraform_vars())
     removed = commands.delete_agent_logs(settings.region)
-    print(f"DOWN: everything is deleted. Agent log groups removed: {removed}.")
+    print(f"DOWN: the demo is deleted from AWS. Agent log groups removed: {removed}.")
 
 
 def cmd_status(demo):

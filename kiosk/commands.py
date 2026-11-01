@@ -31,7 +31,7 @@ class AgentUnavailable(RuntimeError):
 
     def __init__(self, reason):
         self.reason = reason
-        super().__init__(f"AGENT UNAVAILABLE: {reason}. Next: the same evidence, without the agent")
+        super().__init__(f"AGENT UNAVAILABLE: {reason}. Next: check Bedrock access, then run it again")
 
 
 # --- Commands ---------------------------------------------------------------------------------
@@ -186,7 +186,7 @@ def print_receipts(outputs, run):
         calls = len(run.tool_calls)
         print(
             f"RECEIPTS INCOMPLETE: {calls - len(missing)} of {calls} tool calls have a receipt; "
-            f"missing {', '.join(missing)}. Next: ./kopi observe in a minute"
+            f"missing {', '.join(missing)}. Next: ./kopi observe starts a new run with its own receipts"
         )
     if unreported:
         print(

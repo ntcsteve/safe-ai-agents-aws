@@ -296,6 +296,7 @@ def disconnect():
             "CLUMIO DISCONNECT FAILED: read the output above, and nothing else was removed. If your tenant refused "
             "to delete the connection, ask your Clumio admin. Next: ./kopi down"
         ) from None
+    print("Clumio: disconnected. Any SecureVault copies stay until their 30-day retention ends.")
 
 
 def _require_good_version(previewed, versions, stall, scenario, point):

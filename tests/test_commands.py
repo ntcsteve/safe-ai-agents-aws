@@ -626,7 +626,7 @@ class Down(unittest.TestCase):
         ):
             result, printed = quietly(KOPI.main, ["kopi", "down"])
         self.assertEqual(result, 0)
-        self.assertIn("DOWN", printed)
+        self.assertIn("DOWN: the demo is deleted from AWS", printed)
         scenario.assert_not_called()
         state.assert_not_called()
 
@@ -691,6 +691,10 @@ class Observe(unittest.TestCase):
         self.assertIn("AGENT UNAVAILABLE: timeout", printed)
         self.assertEqual(tools.call_count, 3)  # both stalls, then the recent changes
         receipts.assert_not_called()
+
+    def test_agent_down_names_a_next_step_every_command_can_take(self):
+        """eval prints this and stops, so it cannot promise the evidence that only observe goes on to show."""
+        self.assertIn("Next: check Bedrock access, then run it again", str(commands.AgentUnavailable("timeout")))
 
 
 if __name__ == "__main__":
