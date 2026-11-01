@@ -3,7 +3,8 @@
 Optional. Finish the main [README](../../README.md) first. This adds a second way to recover, using
 [Clumio](https://clumio.com) Backtrack. Delete this folder and the AWS demo still works.
 
-**Plan two sittings.** Backtrack rolls back to a daily sync, so after connecting you wait up to a day.
+**Allow for a wait.** Backtrack rolls back to a sync. In our test the first sync ran 5 minutes after connecting, but
+allow up to a day.
 
 ## What it adds
 
@@ -55,8 +56,8 @@ a `terraform.tfvars`: `./kopi` reads this file and nothing else.
 Terraform shows its plan and asks you to type `yes`, twice on a first connect. The first adds the connection and
 Clumio's IAM roles. Then it waits for Clumio to discover the bucket, then adds the protection.
 
-**2. Wait for the first sync.** Run `./kopi` to check. Leave the menus `HEALTHY` until it says `Clumio: ready`,
-because a sync taken while a menu is broken captures the bad change.
+**2. Wait for the first sync.** Run `./kopi` to check. Leave the menus `HEALTHY` until it says `Clumio: ready`, because
+a sync taken while a menu is broken captures the bad change.
 
 **3. Break it and roll it back**
 
@@ -66,7 +67,7 @@ because a sync taken while a menu is broken captures the bad change.
 ./kopi recover --clumio
 ```
 
-It previews the one object, then asks for `ROLL BACK`. Clumio takes about 2 minutes.
+It previews the one object, then asks for `ROLL BACK`. Clumio took about 2 minutes in our test.
 
 **4. Remove everything**
 
@@ -74,8 +75,8 @@ It previews the one object, then asks for `ROLL BACK`. Clumio takes about 2 minu
 ./kopi down
 ```
 
-It unprotects the bucket and removes the connection and Clumio's IAM roles first, then removes the demo. Type `yes`
-each time. SecureVault copies stay until their 30-day retention ends.
+It removes the protection, the connection and Clumio's IAM roles first, then the demo. Type `yes` at both prompts.
+In our test this took about 6 minutes. SecureVault copies stay until their 30-day retention ends.
 
 ## If something goes wrong
 
@@ -89,7 +90,7 @@ each time. SecureVault copies stay until their 30-day retention ends.
 | `WRONG SCOPE` | The preview is not exactly the one object | Stop. Nothing was rolled back |
 | `PREVIEW ONLY` | You did not type `ROLL BACK` | `./kopi recover --clumio` |
 | `CLUMIO TASK FAILED` | The rollback failed or timed out | Open the task in the Clumio console. Do not submit it again |
-| `CLUMIO DISCONNECT FAILED` | Some tenants refuse to delete a connection | Ask your Clumio admin, then `./kopi down` |
+| `CLUMIO DISCONNECT FAILED` | Clumio or Terraform stopped the removal, and the demo was left running | Read the error. If your tenant refuses, ask your Clumio admin. Then `./kopi down` |
 
 ## Going further
 

@@ -45,9 +45,9 @@ production needs:
 - Terraform state is a local file. Do not delete `infra/terraform.tfstate` until after `./kopi down`.
 - Your terminal holds write access. The agent never gets those credentials.
 
-**Cost.** A full run should cost a few cents to a few tens of cents while it runs. The author's whole of
-October 2026, 32 recorded agent runs plus other testing, cost under US$4 for AgentCore, Claude and S3
-together. CloudFront is not in that figure. Your bill may differ, so run `./kopi down` when you finish.
+**Cost.** A full run should cost a few cents to a few tens of cents. As a guide, 32 recorded agent runs plus other
+testing cost under US$4 in October 2026 for AgentCore, Claude and S3 together, not counting CloudFront. Your bill
+may differ, so run `./kopi down` when you finish.
 
 **You need:**
 
@@ -65,9 +65,10 @@ together. CloudFront is not in that figure. Your bill may differ, so run `./kopi
 ./kopi up
 ```
 
-It checks your setup, then shows the account and region it will use, then Terraform's plan. Check the
-account, then type `yes`. It ends with `HEALTHY` and a URL. Open the URL, on a phone if you can. Every price is
-correct. Add something to your order.
+It checks your setup, then shows the account and region it will use, then Terraform's plan. Check the account,
+then type `yes`. It ends with `HEALTHY` and a URL.
+
+Open the URL, on a phone if you can. Every price is correct. Add something to your order.
 
 **2. Safe: can the agent touch the data?**
 
@@ -75,8 +76,9 @@ correct. Add something to your order.
 ./kopi safe
 ```
 
-AWS's IAM simulator checks each role the agent reaches. Expect `BOUNDARY HOLDS`. This reads the roles' own
-policies, so it proves what they allow. It does not cover organization-wide policies, and it is not a live
+AWS's IAM simulator checks each role the agent reaches. Expect `BOUNDARY HOLDS`.
+
+This proves what the roles' own policies allow. It does not cover organization-wide policies, and it is not a live
 call being refused.
 
 **3. Break it**
@@ -86,8 +88,7 @@ call being refused.
 ```
 
 A change that was approved, and wrong: three prices go up 100 times. Within seconds the page shows it, and your
-order total jumps.
-The clock starts against a 10-minute tolerance.
+order total jumps. The clock starts against a 10-minute tolerance.
 
 **4. Observable: what happened, and what did the agent do?**
 
@@ -150,10 +151,12 @@ changed. These files hold everything you would change:
 | Region or model | `config.env` | Region change: `./kopi down` first, then `./kopi up` |
 | The agent's instructions | `infra/investigator-prompt.md` | Then run `./kopi eval` |
 
-`./kopi eval` runs three scripted checks on the agent. Run it after changing the prompt or the model. It judges
-the agent mainly by what AWS shows: nothing may change in S3, and a broken menu's answer must name the real
-version IDs. Its one wording check is "No problem found" on healthy menus. It cannot prove an answer is honest: it
-would not catch an agent saying it fixed something when it had not, though S3 would show that nothing changed.
+Run `./kopi eval` after changing the prompt or the model. It makes three checks, mainly on what AWS shows: nothing
+may change in S3, and an answer about a broken menu must name the real version IDs. Its one wording check is "No
+problem found" on healthy menus.
+
+It cannot prove an answer is honest. It would not catch an agent claiming a fix it never made, though S3 would still
+show that nothing changed.
 
 Only `ap-southeast-2` has been tested. Another region needs AgentCore and a Claude inference profile there.
 A wrong `MODEL` is refused before anything is created.
@@ -200,8 +203,11 @@ tests/               what ./check runs
 
 ## Status
 
-Tested on 31 October 2026 in one AWS account, in `ap-southeast-2`, with Terraform 1.15, AWS provider 6.70.0
-and `au.anthropic.claude-sonnet-4-6`. Never yet tested in a brand-new account.
+The AWS demo was tested on 31 October 2026 on macOS, in one AWS account, in `ap-southeast-2`, with Terraform 1.15,
+AWS provider 6.70.0 and `au.anthropic.claude-sonnet-4-6`. It has never been tested in a brand-new account.
+
+The Clumio add-on was tested on 1 November 2026 in the same account: first connect, rollback and removal. A blank
+`CLUMIO_OU_ID` and the `CLUMIO POINT BAD` refusal have only been tested in code.
 
 This is a personal learning project, offered as is, with no support. It is not an official AWS or Commvault
 product. Apache-2.0: see [LICENSE](LICENSE). Photos and font keep their own licences: see
