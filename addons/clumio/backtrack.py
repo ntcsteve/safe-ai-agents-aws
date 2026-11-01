@@ -274,11 +274,13 @@ def disconnect():
     settings = read_settings()
     recorded = _addon_outputs()
     try:
-        _terraform(settings, "destroy", *_variables(settings, recorded["bucket"], recorded["region"]))
+        _terraform(
+            settings, "destroy", *_variables(settings, recorded["bucket"], recorded["region"]), "-var=protect=true"
+        )
     except subprocess.CalledProcessError:
         raise ClumioRefused(
-            "CLUMIO DISCONNECT FAILED: read the output above. Some tenants refuse to delete a connection. "
-            "Next: ask your Clumio admin, then ./kopi down"
+            "CLUMIO DISCONNECT FAILED: read the output above, and nothing else was removed. If your tenant refused "
+            "to delete the connection, ask your Clumio admin. Next: ./kopi down"
         ) from None
 
 

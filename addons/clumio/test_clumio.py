@@ -2,6 +2,7 @@
 real menu logic. These tests live here so that deleting this folder removes them too."""
 
 import json
+import re
 import subprocess
 import unittest
 from unittest import mock
@@ -222,6 +223,12 @@ class Connect(unittest.TestCase):
             result, printed = quietly(backtrack.connect, demo)
         return result, printed, terraform
 
+    def test_every_declared_variable_is_passed_on_each_apply(self):
+        declared = set(re.findall(r'variable "(\w+)"', (backtrack.HERE / "variables.tf").read_text()))
+        _, _, terraform = self.connect([None, ""])
+        for apply in self.applies(terraform):
+            self.assertEqual({arg.split("=")[1] for arg in apply[1:] if arg.startswith("-var=")}, declared)
+
     def applies(self, terraform):
         return [call.args for call in terraform.call_args_list if call.args[1] == "apply"]
 
@@ -304,11 +311,18 @@ class Disconnect(unittest.TestCase):
         self.assertEqual(terraform.call_args.args[1], "destroy")
         self.assertIn("-var=bucket=kopi-x", terraform.call_args.args)
 
-    def test_a_refused_disconnect_is_named_and_stops_down(self):
+    def test_every_declared_variable_is_passed(self):
+        """Live, 1 Nov 2026: protect was missing, so Terraform asked for it and took the answer to its next prompt."""
+        declared = set(re.findall(r'variable "(\w+)"', (backtrack.HERE / "variables.tf").read_text()))
+        _, _, terraform = self.disconnect()
+        passed = {arg.split("=")[1] for arg in terraform.call_args.args[1:] if arg.startswith("-var=")}
+        self.assertEqual(passed, declared)
+
+    def test_a_failed_disconnect_stops_down_without_guessing_why(self):
         result, _, _ = self.disconnect(side_effect=subprocess.CalledProcessError(1, "terraform"))
         self.assertIsInstance(result, recovery.RecoveryRefused)
         self.assertIn("CLUMIO DISCONNECT FAILED", str(result))
-        self.assertIn("Next:", str(result))
+        self.assertIn("Next: ./kopi down", str(result))
 
 
 class Active(unittest.TestCase):
