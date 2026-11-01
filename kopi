@@ -150,7 +150,7 @@ def cmd_down():
         addon.disconnect()
     _terraform("destroy", *settings.terraform_vars())
     removed = commands.delete_agent_logs(settings.region)
-    print(f"DOWN: everything is deleted, including {removed} agent log group(s) Terraform did not create.")
+    print(f"DOWN: everything is deleted. Agent log groups removed: {removed}.")
 
 
 def cmd_status(demo):

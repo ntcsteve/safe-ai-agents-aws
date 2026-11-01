@@ -586,14 +586,14 @@ class Down(unittest.TestCase):
         _, printed, logs, _, _ = self.down()
         self.assertEqual(len(logs.groups), 1)
         self.assertIn("harness_acd_kopi_investigator", logs.groups[0])
-        self.assertIn("1 agent log group(s)", printed)
+        self.assertIn("Agent log groups removed: 1", printed)
 
     def test_running_it_twice_is_safe(self):
         logs = FakeLogs()
         self.down(logs)
         result, printed, _, _, _ = self.down(logs)
         self.assertEqual(result, None)
-        self.assertIn("0 agent log group(s)", printed)
+        self.assertIn("Agent log groups removed: 0", printed)
 
     def test_a_cancelled_destroy_leaves_the_logs_alone(self):
         cancelled = subprocess.CalledProcessError(1, "terraform")

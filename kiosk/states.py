@@ -71,4 +71,4 @@ def refusal(command, state, detail):
         return f"REGION CHANGED: {detail}. Next: {NEXT[state]}"
     if state is State.NOT_DEPLOYED:
         return f"NOT DEPLOYED. Next: {NEXT[state]}"
-    return f"NOT NOW: ./kopi {command} needs a different state, and the menus are {state}. Next: {NEXT[state]}"
+    return f"NOT NOW: ./kopi {command} does not apply while the menus are {state}. Next: {NEXT[state]}"
