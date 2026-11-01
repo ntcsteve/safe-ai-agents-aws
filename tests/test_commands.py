@@ -238,7 +238,7 @@ class Gate(unittest.TestCase):
         ):
             result, printed = quietly(KOPI.main, ["kopi", "observe"])
         self.assertEqual(result, 2)
-        self.assertIn("Next: ./kopi break", printed)
+        self.assertIn("Next: ./kopi safe, then ./kopi break", printed)
         observe.assert_not_called()
 
     def test_a_refused_scenario_or_change_names_a_next_step(self):
@@ -324,7 +324,7 @@ class Journey(unittest.TestCase):
         self.assertEqual(self.store.writes, [])
 
     def test_bare_kopi_follows_the_journey(self):
-        self.assertIn("Next:  ./kopi break", self.run_command()[1])
+        self.assertIn("Next:  ./kopi safe, then ./kopi break", self.run_command()[1])
         self.run_command("break")
         self.assertIn("Next:  ./kopi observe", self.run_command()[1])
         self.run_command("recover")

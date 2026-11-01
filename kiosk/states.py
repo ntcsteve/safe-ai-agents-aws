@@ -35,7 +35,7 @@ NEXT = {
     State.NOT_DEPLOYED: "./kopi up",
     State.REGION_CHANGED: "./kopi down, then ./kopi up",
     State.CONFIG_NOT_APPLIED: "./kopi up",
-    State.HEALTHY: "./kopi break",
+    State.HEALTHY: "./kopi safe, then ./kopi break",
     State.BROKEN: "./kopi observe, then ./kopi recover",
 }
 
