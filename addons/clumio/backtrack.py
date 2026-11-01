@@ -71,9 +71,16 @@ def read_settings():
 
 def is_active():
     """True when this add-on's Terraform holds resources: Clumio is connected, or partly connected."""
-    if not STATE_FILE.exists():
-        return False
-    return bool(json.loads(STATE_FILE.read_text()).get("resources"))
+    return bool(_state_resources())
+
+
+def is_protected():
+    """True once the protection exists. Connected alone is not enough: no sync will ever run."""
+    return any(r.get("module", "").startswith("module.menus_protection") for r in _state_resources())
+
+
+def _state_resources():
+    return json.loads(STATE_FILE.read_text()).get("resources", []) if STATE_FILE.exists() else []
 
 
 class ClumioBacktrack:
@@ -199,8 +206,8 @@ def connect(demo):
 
 def recover(demo):
     """Roll the one bad object back to Clumio's last sync, after a person types ROLL BACK."""
-    if not is_active():
-        raise ClumioRefused("CLUMIO NOT SET UP: this bucket is not connected. Next: ./kopi reset, then ./kopi clumio")
+    if not is_protected():
+        raise ClumioRefused("CLUMIO NOT SET UP: this bucket is not protected. Next: ./kopi reset, then ./kopi clumio")
     client = ClumioBacktrack(read_settings())
     bucket = demo.outputs["bucket"]
     stall = demo.scenario["fault"]["stall"]
@@ -248,6 +255,8 @@ def status_line(bucket):
     stop someone finding out where they are."""
     if not is_active():
         return None
+    if not is_protected():
+        return "Clumio: connected but not protected, so no sync will run. Finish with ./kopi clumio"
     try:
         _, _, last_sync = ClumioBacktrack(read_settings()).find_bucket(bucket)
     except ClumioRefused as error:

@@ -1,6 +1,7 @@
 """The Clumio add-on, one test per named outcome. Clumio and Terraform are faked at their seams; the menus are
 real menu logic. These tests live here so that deleting this folder removes them too."""
 
+import json
 import subprocess
 import unittest
 from unittest import mock
@@ -130,7 +131,7 @@ class Recover(unittest.TestCase):
         with (
             mock.patch.object(backtrack, "read_settings", return_value=settings()),
             mock.patch.object(backtrack, "ClumioBacktrack", return_value=clumio),
-            mock.patch.object(backtrack, "is_active", return_value=active),
+            mock.patch.object(backtrack, "is_protected", return_value=active),
             mock.patch("builtins.input", return_value=typed),
         ):
             result, printed = quietly(backtrack.recover, demo)
@@ -247,12 +248,13 @@ class Connect(unittest.TestCase):
 
 
 class Status(unittest.TestCase):
-    def status(self, found):
+    def status(self, found, protected=True):
         client = mock.Mock()
         client.find_bucket.side_effect = found if isinstance(found, Exception) else None
         client.find_bucket.return_value = found
         with (
             mock.patch.object(backtrack, "is_active", return_value=True),
+            mock.patch.object(backtrack, "is_protected", return_value=protected),
             mock.patch.object(backtrack, "read_settings", return_value=settings()),
             mock.patch.object(backtrack, "ClumioBacktrack", return_value=client),
         ):
@@ -260,6 +262,13 @@ class Status(unittest.TestCase):
 
     def test_waiting_for_the_first_sync(self):
         self.assertIn("waiting for its first sync", self.status(("bkt", "env", None)))
+
+    def test_connected_but_not_protected_never_says_to_wait(self):
+        """Live, 1 Nov 2026: stopping at the second approval left it connected, and no sync would ever come."""
+        line = self.status(("bkt", "env", None), protected=False)
+        self.assertIn("not protected", line)
+        self.assertIn("./kopi clumio", line)
+        self.assertNotIn("waiting", line)
 
     def test_ready(self):
         self.assertIn("last sync 2026-10-30T18:50:00Z", self.status(("bkt", "env", "2026-10-30T18:50:00Z")))
@@ -308,6 +317,20 @@ class Active(unittest.TestCase):
         fake.exists.return_value = False
         with mock.patch.object(backtrack, "STATE_FILE", fake):
             self.assertFalse(backtrack.is_active())
+
+
+class Protected(unittest.TestCase):
+    def state(self, *modules):
+        fake = mock.Mock()
+        fake.exists.return_value = True
+        fake.read_text.return_value = json.dumps({"resources": [{"module": m} for m in modules]})
+        return mock.patch.object(backtrack, "STATE_FILE", fake)
+
+    def test_only_the_protection_module_counts(self):
+        with self.state("module.clumio_iam.module.aws_template"):
+            self.assertFalse(backtrack.is_protected())
+        with self.state("module.clumio_iam", "module.menus_protection[0]"):
+            self.assertTrue(backtrack.is_protected())
 
 
 class Wiring(unittest.TestCase):
