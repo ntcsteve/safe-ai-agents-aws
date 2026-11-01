@@ -1,10 +1,12 @@
 """The Clumio add-on, one test per named outcome. Clumio and Terraform are faked at their seams; the menus are
 real menu logic. These tests live here so that deleting this folder removes them too."""
 
+import io
 import json
 import re
 import subprocess
 import unittest
+import urllib.error
 from unittest import mock
 
 from addons.clumio import backtrack
@@ -205,12 +207,14 @@ class Recover(unittest.TestCase):
 
 class Connect(unittest.TestCase):
     def connect(self, seen):
-        """seen: what each find_bucket call returns, in order; None means Clumio cannot see the bucket yet."""
+        """seen: what each find_bucket call does, in order. None means Clumio cannot see the bucket yet, an
+        exception is raised, and anything else is the last sync."""
         demo = KOPI.Demo(SETTINGS, KOPI._load_scenario("kopi"))
         demo.__dict__["deployed"] = OUTPUTS
         client = mock.Mock()
         client.find_bucket.side_effect = [
-            backtrack.ClumioRefused("not seen") if s is None else ("bkt", "env", s) for s in seen
+            backtrack.BucketNotSeen("not seen") if s is None else s if isinstance(s, Exception) else ("bkt", "env", s)
+            for s in seen
         ]
         clock = iter(range(0, 100000, 30))
         with (
@@ -253,14 +257,44 @@ class Connect(unittest.TestCase):
         self.assertIn("Next: ./kopi clumio", str(result))
         self.assertEqual(len(self.applies(terraform)), 1)
 
+    def test_a_refused_token_stops_before_anything_is_applied(self):
+        """Live, 1 Nov 2026: a 401 passed for a bucket not seen yet, so the apply ran and blamed the OU."""
+        result, _, terraform = self.connect([backtrack.ClumioRefused("CLUMIO API FAILED: HTTP 401")])
+        self.assertIn("CLUMIO API FAILED", str(result))
+        self.assertEqual(self.applies(terraform), [])
+
+    def test_a_refused_token_during_the_wait_stops_the_wait(self):
+        result, _, terraform = self.connect([None, backtrack.ClumioRefused("CLUMIO API FAILED: HTTP 401")])
+        self.assertIn("CLUMIO API FAILED", str(result))
+        self.assertEqual(len(self.applies(terraform)), 1)
+
+
+class SeesBucket(unittest.TestCase):
+    """Through the real client, faked only at the HTTP call, because this is the seam the 401 slipped through."""
+
+    def test_a_401_from_the_api_is_not_a_bucket_not_seen(self):
+        refused = urllib.error.HTTPError("url", 401, "Unauthorized", {}, io.BytesIO(b"Unauthorized access"))
+        with (
+            mock.patch.object(backtrack.urllib.request, "urlopen", side_effect=refused),
+            self.assertRaisesRegex(backtrack.ClumioRefused, "CLUMIO API FAILED.*401"),
+        ):
+            backtrack._sees(backtrack.ClumioBacktrack(settings()), "kopi-x")
+
+    def test_an_empty_answer_is_a_bucket_not_seen(self):
+        response = mock.MagicMock()
+        response.__enter__.return_value = io.BytesIO(b'{"_embedded": {"items": []}}')
+        with mock.patch.object(backtrack.urllib.request, "urlopen", return_value=response):
+            self.assertFalse(backtrack._sees(backtrack.ClumioBacktrack(settings()), "kopi-x"))
+
 
 class Status(unittest.TestCase):
-    def status(self, found, protected=True):
+    def status(self, found, protected=True, connected=True):
         client = mock.Mock()
         client.find_bucket.side_effect = found if isinstance(found, Exception) else None
         client.find_bucket.return_value = found
         with (
             mock.patch.object(backtrack, "is_active", return_value=True),
+            mock.patch.object(backtrack, "is_connected", return_value=connected),
             mock.patch.object(backtrack, "is_protected", return_value=protected),
             mock.patch.object(backtrack, "read_settings", return_value=settings()),
             mock.patch.object(backtrack, "ClumioBacktrack", return_value=client),
@@ -278,6 +312,12 @@ class Status(unittest.TestCase):
         self.assertIn("not protected", line)
         self.assertEqual(next_step, "./kopi clumio")
         self.assertNotIn("waiting", line)
+
+    def test_a_connect_that_stopped_before_the_connection_does_not_claim_one(self):
+        """Live, 1 Nov 2026: a refused connect left only timers in the state, and this said connected."""
+        line, next_step = self.status(("bkt", "env", None), protected=False, connected=False)
+        self.assertIn("not connected", line)
+        self.assertEqual(next_step, "./kopi clumio")
 
     def test_ready(self):
         line, next_step = self.status(("bkt", "env", "2026-10-30T18:50:00Z"))
@@ -318,6 +358,16 @@ class Disconnect(unittest.TestCase):
         passed = {arg.split("=")[1] for arg in terraform.call_args.args[1:] if arg.startswith("-var=")}
         self.assertEqual(passed, declared)
 
+    def test_protect_matches_the_state_so_a_short_connect_can_be_removed(self):
+        """Live, 1 Nov 2026: protect=true with no protection ended in Invalid for_each, and the stack kept billing."""
+        for protected, expected in ((True, "-var=protect=true"), (False, "-var=protect=false")):
+            with (
+                self.subTest(protected=protected),
+                mock.patch.object(backtrack, "is_protected", return_value=protected),
+            ):
+                _, _, terraform = self.disconnect()
+                self.assertIn(expected, terraform.call_args.args)
+
     def test_a_failed_disconnect_stops_down_without_guessing_why(self):
         result, _, _ = self.disconnect(side_effect=subprocess.CalledProcessError(1, "terraform"))
         self.assertIsInstance(result, recovery.RecoveryRefused)
@@ -337,6 +387,17 @@ class Active(unittest.TestCase):
         fake.exists.return_value = False
         with mock.patch.object(backtrack, "STATE_FILE", fake):
             self.assertFalse(backtrack.is_active())
+
+
+class Connected(unittest.TestCase):
+    def test_only_the_connection_resource_counts(self):
+        fake = mock.Mock()
+        fake.exists.return_value = True
+        for resource_type, expected in (("time_sleep", False), ("clumio_aws_connection", True)):
+            with self.subTest(resource_type=resource_type):
+                fake.read_text.return_value = json.dumps({"resources": [{"type": resource_type}]})
+                with mock.patch.object(backtrack, "STATE_FILE", fake):
+                    self.assertIs(backtrack.is_connected(), expected)
 
 
 class Protected(unittest.TestCase):

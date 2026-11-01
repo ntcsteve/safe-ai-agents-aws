@@ -34,6 +34,10 @@ class ClumioRefused(recovery.RecoveryRefused):
     """Clumio could not do exactly what was asked. The message names the state and the next step."""
 
 
+class BucketNotSeen(ClumioRefused):
+    """Clumio answered, and does not list the bucket yet. Every other refusal is a real failure, not a wait."""
+
+
 @dataclasses.dataclass(frozen=True)
 class Settings:
     token: str = dataclasses.field(repr=False)
@@ -74,6 +78,11 @@ def is_active():
     return bool(_state_resources())
 
 
+def is_connected():
+    """True once the connection exists. A first connect can stop before it, leaving only timers in the state."""
+    return any(r.get("type") == "clumio_aws_connection" for r in _state_resources())
+
+
 def is_protected():
     """True once the protection exists. Connected alone is not enough: no sync will ever run."""
     return any(r.get("module", "").startswith("module.menus_protection") for r in _state_resources())
@@ -95,6 +104,8 @@ class ClumioBacktrack:
             "GET", f"/datasources/aws/s3-buckets?filter={flt}", "application/api.clumio.aws-s3-buckets=v1+json"
         )
         found = [b for b in items.get("_embedded", {}).get("items", []) if b.get("name") == name]
+        if not found:
+            raise BucketNotSeen(f"Clumio sees no bucket named {name}")
         if len(found) != 1:
             raise ClumioRefused(f"Clumio sees {len(found)} buckets named {name}; expected 1")
         return found[0]["id"], found[0]["environment_id"], found[0].get("last_backtrack_sync_timestamp")
@@ -255,6 +266,8 @@ def status(bucket):
     Never raises: a Clumio outage must not stop someone finding out where they are."""
     if not is_active():
         return None
+    if not is_connected():
+        return "Clumio: not connected. The last ./kopi clumio did not finish", "./kopi clumio"
     if not is_protected():
         return "Clumio: connected but not protected, so no sync will run", "./kopi clumio"
     try:
@@ -273,10 +286,11 @@ def disconnect():
     """Unprotect the bucket, then remove the connection and Clumio's IAM, from what this add-on recorded."""
     settings = read_settings()
     recorded = _addon_outputs()
+    variables = _variables(settings, recorded["bucket"], recorded["region"])
+    # protect must match the state: Terraform cannot plan a protection that was never created, even to destroy it.
+    protect = "true" if is_protected() else "false"
     try:
-        _terraform(
-            settings, "destroy", *_variables(settings, recorded["bucket"], recorded["region"]), "-var=protect=true"
-        )
+        _terraform(settings, "destroy", *variables, f"-var=protect={protect}")
     except subprocess.CalledProcessError:
         raise ClumioRefused(
             "CLUMIO DISCONNECT FAILED: read the output above, and nothing else was removed. If your tenant refused "
@@ -299,7 +313,7 @@ def _require_good_version(previewed, versions, stall, scenario, point):
 def _sees(client, bucket):
     try:
         client.find_bucket(bucket)
-    except ClumioRefused:
+    except BucketNotSeen:
         return False
     return True
 
