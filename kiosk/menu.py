@@ -59,7 +59,7 @@ def _validate_currency(currency):
 
 
 def _validate_tolerance(minutes):
-    # The service resilience indicator: how long the menu may stay wrong after a bad change.
+    # How long the menu may stay wrong after a bad change.
     if not isinstance(minutes, int) or isinstance(minutes, bool) or minutes <= 0:
         raise ScenarioError(f"impact_tolerance_minutes must be a positive whole number, got {minutes!r}")
 
@@ -90,9 +90,11 @@ def _validate_promo(promo, fault, stalls):
         if not promo.get(field):
             raise ScenarioError(f"promo.{field} is missing")
     stall = _require_stall(stalls, promo.get("stall"), "promo.stall")
-    # This proves scoping: rolling back the fault's key must leave the promo alone.
+    # This proves scope: restoring the bad menu must leave the promo alone.
     if promo["stall"] == fault["stall"]:
-        raise ScenarioError("promo.stall must differ from fault.stall, so the rollback scope excludes it")
+        raise ScenarioError(
+            "promo.stall must differ from fault.stall, so restoring the bad menu leaves the promo alone"
+        )
     if promo.get("item") not in _item_ids(stall):
         raise ScenarioError(f"promo.item '{promo.get('item')}' is not on stall '{promo['stall']}'")
     _require_price(promo.get("price"), "promo.price")

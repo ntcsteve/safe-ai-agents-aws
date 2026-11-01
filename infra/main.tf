@@ -102,7 +102,7 @@ resource "aws_s3_object" "fonts" {
 }
 
 # What the page needs from the scenario: title, stalls in order, images, promo, and the
-# expected prices. Presentation stays out of the menu objects, so the agent and the rollback deal
+# expected prices. Presentation stays out of the menu objects, so the agent and recovery deal
 # in prices only. The page shows the promo badge only while the promo price is live in the menu.
 resource "aws_s3_object" "site_config" {
   bucket        = aws_s3_bucket.menus.id

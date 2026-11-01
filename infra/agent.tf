@@ -98,8 +98,8 @@ resource "aws_lambda_function" "tools" {
   source_code_hash = data.archive_file.tools.output_base64sha256
   timeout          = 15
   memory_size      = 256
-  # No reserved concurrency: this account's Sydney limit is 10, and AWS keeps all 10 unreserved.
-  # The bound is upstream instead: the harness allows at most 10 iterations per ask.
+  # No reserved concurrency: an account with a limit of 10 cannot reserve any.
+  # The limit is upstream instead: the harness allows at most 10 iterations per ask.
   environment {
     variables = { MENU_BUCKET = aws_s3_bucket.menus.id }
   }

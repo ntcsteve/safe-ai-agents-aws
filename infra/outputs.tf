@@ -1,5 +1,5 @@
-# ARNs hold the account ID, so they stay off the screen; ./kopi still reads them.
 # What is deployed, so ./kopi can tell when the files have changed since the last ./kopi up.
+# ARNs hold the account ID, so they are marked sensitive: off the screen, but ./kopi can still read them.
 output "region" { value = var.region }
 output "model" { value = var.model }
 output "scenario" { value = var.scenario }

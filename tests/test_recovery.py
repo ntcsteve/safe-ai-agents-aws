@@ -1,8 +1,10 @@
 """Recovery's pure parts: the clock and the key's history."""
 
+import json
+import pathlib
 import unittest
 
-from kiosk import recovery
+from kiosk import menu, recovery
 
 KEY = "menus/stall-kopi.json"
 
@@ -63,11 +65,6 @@ class KeyHistory(unittest.TestCase):
     reader sees the restored good bytes and the fault kept in history."""
 
     def setUp(self):
-        import json
-        import pathlib
-
-        from kiosk import menu
-
         self.scenario = menu.load_scenario(
             json.loads((pathlib.Path(__file__).resolve().parent.parent / "scenario" / "kopi.json").read_text())
         )
@@ -106,11 +103,6 @@ class ChangedKeys(unittest.TestCase):
 
 class ChooseRestore(unittest.TestCase):
     def setUp(self):
-        import json
-        import pathlib
-
-        from kiosk import menu
-
         self.scenario = menu.load_scenario(
             json.loads((pathlib.Path(__file__).resolve().parent.parent / "scenario" / "kopi.json").read_text())
         )

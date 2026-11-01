@@ -1,4 +1,4 @@
-# No defaults except where noted: these come from ./kopi, the one way to run this.
+# No defaults: these come from ./kopi, the one way to run this.
 
 variable "bucket" {
   description = "The menus bucket."
