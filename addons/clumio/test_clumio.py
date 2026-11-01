@@ -258,27 +258,33 @@ class Status(unittest.TestCase):
             mock.patch.object(backtrack, "read_settings", return_value=settings()),
             mock.patch.object(backtrack, "ClumioBacktrack", return_value=client),
         ):
-            return backtrack.status_line("kopi-x")
+            return backtrack.status("kopi-x")
 
     def test_waiting_for_the_first_sync(self):
-        self.assertIn("waiting for its first sync", self.status(("bkt", "env", None)))
+        line, next_step = self.status(("bkt", "env", None))
+        self.assertIn("waiting for its first sync", line)
+        self.assertNotIn("break", next_step)  # breaking now could put the fault into the first sync
 
     def test_connected_but_not_protected_never_says_to_wait(self):
         """Live, 1 Nov 2026: stopping at the second approval left it connected, and no sync would ever come."""
-        line = self.status(("bkt", "env", None), protected=False)
+        line, next_step = self.status(("bkt", "env", None), protected=False)
         self.assertIn("not protected", line)
-        self.assertIn("./kopi clumio", line)
+        self.assertEqual(next_step, "./kopi clumio")
         self.assertNotIn("waiting", line)
 
     def test_ready(self):
-        self.assertIn("last sync 2026-10-30T18:50:00Z", self.status(("bkt", "env", "2026-10-30T18:50:00Z")))
+        line, next_step = self.status(("bkt", "env", "2026-10-30T18:50:00Z"))
+        self.assertIn("last sync 2026-10-30T18:50:00Z", line)
+        self.assertIn("./kopi recover --clumio", next_step)
 
     def test_an_api_failure_never_breaks_the_status(self):
-        self.assertIn("cannot reach", self.status(backtrack.ClumioRefused("HTTP 500")))
+        line, next_step = self.status(backtrack.ClumioRefused("HTTP 500"))
+        self.assertIn("cannot reach", line)
+        self.assertIsNone(next_step)
 
     def test_silent_when_the_add_on_is_not_in_use(self):
         with mock.patch.object(backtrack, "is_active", return_value=False):
-            self.assertIsNone(backtrack.status_line("kopi-x"))
+            self.assertIsNone(backtrack.status("kopi-x"))
 
 
 class Disconnect(unittest.TestCase):

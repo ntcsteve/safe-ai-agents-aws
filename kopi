@@ -160,13 +160,16 @@ def cmd_status(demo):
         demo.check()
     else:
         print(f"State: {state}")
+    next_step = states.NEXT[state]
     if demo.deployed:
         print(f"Page:  {demo.deployed['url']}")
         addon = clumio_addon()
-        line = addon.status_line(demo.deployed["bucket"]) if addon else None
-        if line:
-            print(line)
-    print(f"Next:  {states.NEXT[state]}")
+        clumio_status = addon.status(demo.deployed["bucket"]) if addon else None
+        if clumio_status:
+            print(clumio_status[0])
+            if state is states.State.HEALTHY:  # a broken menu always gets its recovery steps
+                next_step = clumio_status[1] or next_step
+    print(f"Next:  {next_step}")
 
 
 def cmd_clumio(demo):

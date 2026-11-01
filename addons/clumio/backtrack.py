@@ -250,20 +250,23 @@ def recover(demo):
     return code
 
 
-def status_line(bucket):
-    """One line for bare ./kopi, or None when the add-on is not in use. Never raises: a Clumio outage must not
-    stop someone finding out where they are."""
+def status(bucket):
+    """(line for bare ./kopi, next step or None for the usual one), or None when the add-on is not in use.
+    Never raises: a Clumio outage must not stop someone finding out where they are."""
     if not is_active():
         return None
     if not is_protected():
-        return "Clumio: connected but not protected, so no sync will run. Finish with ./kopi clumio"
+        return "Clumio: connected but not protected, so no sync will run", "./kopi clumio"
     try:
         _, _, last_sync = ClumioBacktrack(read_settings()).find_bucket(bucket)
     except ClumioRefused as error:
-        return f"Clumio: cannot reach it ({error})"
+        return f"Clumio: cannot reach it ({error})", None
     if last_sync:
-        return f"Clumio: ready, last sync {last_sync}"
-    return "Clumio: waiting for its first sync. Leave the menus HEALTHY"
+        return (
+            f"Clumio: ready, last sync {last_sync}",
+            "./kopi break, then ./kopi observe, then ./kopi recover --clumio",
+        )
+    return "Clumio: waiting for its first sync. Leave the menus HEALTHY", "./kopi again later. It can take up to a day"
 
 
 def disconnect():

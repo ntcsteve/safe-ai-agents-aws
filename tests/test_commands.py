@@ -204,6 +204,30 @@ class Status(unittest.TestCase):
         self.assertIn("Next:  ./kopi up", printed)
 
 
+class StatusWithAddon(unittest.TestCase):
+    def test_the_addon_can_replace_the_next_step(self):
+        addon = mock.Mock()
+        addon.status.return_value = ("Clumio: waiting", "./kopi again after the first sync")
+        with (
+            mock.patch.object(KOPI.Demo, "state", return_value=states.State.HEALTHY),
+            mock.patch.object(KOPI, "clumio_addon", return_value=addon),
+        ):
+            _, printed = quietly(KOPI.cmd_status, make_demo())
+        self.assertIn("Clumio: waiting", printed)
+        self.assertIn("Next:  ./kopi again after the first sync", printed)
+        self.assertNotIn("./kopi break", printed)
+
+    def test_a_broken_menu_always_gets_the_recovery_next_step(self):
+        addon = mock.Mock()
+        addon.status.return_value = ("Clumio: waiting", "./kopi again after the first sync")
+        with (
+            mock.patch.object(KOPI.Demo, "state", return_value=states.State.BROKEN),
+            mock.patch.object(KOPI, "clumio_addon", return_value=addon),
+        ):
+            _, printed = quietly(KOPI.cmd_status, make_demo(broken=True))
+        self.assertIn("Next:  ./kopi observe", printed)
+
+
 class Gate(unittest.TestCase):
     def test_a_command_refused_by_the_table_touches_nothing(self):
         observe = mock.Mock(return_value=0)
