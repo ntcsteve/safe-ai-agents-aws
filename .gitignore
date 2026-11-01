@@ -1,8 +1,6 @@
 # Secrets never leave this machine.
-.env
 *.env
 !config.env
-env.sh
 *.tfvars
 
 # Terraform local state, plans and build output.

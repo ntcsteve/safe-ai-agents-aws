@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Is everything green? Tests (Python 3.13 + JS) and Terraform format and validity.
-# Read-only: changes nothing in AWS. One command per line: `set -e` ignores a failure on the left of
-# `&&`, so a chained step could fail and this script would still reach GREEN.
+# Is everything green? Style, tests, and Terraform format and validity. Changes nothing in AWS.
+# One command per line: `set -e` ignores a failure on the left of `&&`, which once printed GREEN after a failure.
 set -euo pipefail
 cd "$(dirname "$0")"
 echo "== Python style"
@@ -9,18 +8,16 @@ uvx -q ruff check .
 uvx -q ruff format --check . | tail -1
 echo "== Python tests"
 uv run -q --python 3.13 --with boto3 python -m unittest discover -s tests -t . 2>&1 | tail -1
-if [ -d addons/clumio ]; then uv run -q --python 3.13 --with boto3 python -m unittest addons.clumio.test_clumio 2>&1 | tail -1; fi
+if [ -d addons/clumio ]; then
+  uv run -q --python 3.13 --with boto3 python -m unittest addons.clumio.test_clumio 2>&1 | tail -1
+fi
 echo "== JS tests"
 node --test tests/*.test.mjs 2>&1 | grep -E '^ℹ (pass|fail)'
-echo "== Terraform fmt"
-terraform fmt -check -recursive infra
-if [ -d addons/clumio ]; then terraform fmt -check -recursive addons/clumio; fi
-echo "formatted"
-echo "== Terraform valid"
-terraform -chdir=infra init -backend=false -input=false -lockfile=readonly >/dev/null
-terraform -chdir=infra validate -no-color | head -1
-if [ -d addons/clumio ]; then
-  terraform -chdir=addons/clumio init -backend=false -input=false -lockfile=readonly >/dev/null
-  terraform -chdir=addons/clumio validate -no-color | head -1
-fi
+echo "== Terraform"
+for root in infra addons/clumio; do
+  [ -d "$root" ] || continue  # the add-on is optional
+  terraform fmt -check -recursive "$root"
+  terraform -chdir="$root" init -backend=false -input=false -lockfile=readonly >/dev/null
+  terraform -chdir="$root" validate -no-color | head -1
+done
 echo "GREEN"
