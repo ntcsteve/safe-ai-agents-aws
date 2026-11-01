@@ -1,4 +1,4 @@
-// Kopi Kiosk phone page: each stall's current menu, plus an order total that never leaves the phone.
+// The menu page: each stall's current menu, plus an order total that never leaves the device.
 // Menus are polled so a break and a fix appear live: a changed price flashes, a wrong price
 // stays marked, and one notice names the page's state (LIVE, CHANGED, RESTORED; see incident.js).
 // Reading order: start and the poll loop, then what changes the page's state, then rendering.
@@ -42,18 +42,13 @@ async function start() {
     hero.src = config.images.hero;
     hero.hidden = false;
   }
-  if (config.guide_url) {
-    const link = document.getElementById("guide");
-    link.href = config.guide_url;
-    link.hidden = false;
-  }
   await poll();
   setTimeout(() => document.getElementById("menus").classList.remove("first"), 1000); // entrance once
 }
 
 // One poll at a time: the next starts 5 s after this one settles, so slow Wi-Fi can never land an
 // older answer after a newer one. A poll that throws is a page bug: it is reported, and polling
-// carries on, so the phone recovers as soon as the menus do.
+// carries on, so the page recovers as soon as the menus do.
 async function poll() {
   try {
     await refresh();
@@ -192,8 +187,8 @@ function renderItem(item, currency, wrong) {
   return row;
 }
 
-// The promo badge shows only while the promo price is actually live, so phones show
-// whether the valid change survived the rollback.
+// The promo badge shows only while the promo price is actually live, so the page shows
+// whether the valid change survived the restore.
 function promoFor(item) {
   const promo = config.promo;
   return promo && promo.item === item.id && item.price === promo.price ? promo : null;

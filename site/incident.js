@@ -1,10 +1,10 @@
-// What the phone says about the menu: LIVE (all prices correct), CHANGED (some are wrong),
+// What the page says about the menu: LIVE (all prices correct), CHANGED (some are wrong),
 // RESTORED (they were wrong and are correct again; shown for 8 s), plus the OFFLINE notice.
 // Pure: no DOM and no fetch, so tests/incident.test.mjs covers every state.
 // "Correct" is the scenario's expected prices (seed plus the approved promo), the same rule as
-// kiosk/menu.py expected_prices, so the phones and ./kopi check agree on prices. Deviation:
+// kiosk/menu.py expected_prices, so the page and ./kopi check agree on prices. Deviation:
 // check_menus also flags a missing or extra item; the page judges prices only, because every
-// change in this demo (MNT-142, PROMO-7, a rollback) changes prices, never which items exist.
+// change in this demo (the bad change, the promo, a restore) changes prices, never which items exist.
 import { formatPrice } from "./price.js"; // relative, so the browser and node --test both resolve it
 
 export const RESTORED_MS = 8000;
@@ -86,7 +86,7 @@ export function noticeFor({ incident, offline, hasMenu, totals, currency, promo,
   }
 }
 
-// What the break means for this phone's own order. "Your total is Rp 0" would be nonsense, and
+// What the break means for this device's own order. "Your total is Rp 0" would be nonsense, and
 // "hold that order" would be false for an order the break does not touch.
 function changedDetail(totals, currency) {
   if (!totals.count) return ["Check the prices before you order."];
