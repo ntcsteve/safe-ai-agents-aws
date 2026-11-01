@@ -71,7 +71,7 @@ def cmd_safe(demo):
             ],
         ),
         (
-            "Investigator harness role",
+            "Investigator agent role",
             outputs["investigator_role_arn"],
             [
                 ("bedrock-agentcore:InvokeGateway", outputs["gateway_arn"], True),

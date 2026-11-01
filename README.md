@@ -1,12 +1,161 @@
 # Safe AI agents on AWS
 
-See what it takes to let an AI agent near production data. In about 30 minutes you deploy a small menu
-site, break it with a bad change, watch an agent investigate it without being able to touch anything, and
-put it right with one approved restore. Then you remove it all.
+Would you let an AI agent near your production data? Three questions decide it:
 
-**Lost at any point? Run `./kopi`. It tells you where you are and what to run next.**
+1. **Can it touch my data?**
+2. **What did it actually do?**
+3. **Can I get back?**
 
-## Architecture
+This demo answers all three in your own AWS account, in seven short steps and about 20 minutes.
+The last step removes it.
+
+## The story
+
+Kopi Kiosk is a made-up coffee shop website with two menus, Kopi Corner and Kopi Seduh, priced in Indonesian rupiah. An
+approved change goes wrong, and three prices on Kopi Corner jump 100 times. An AI agent investigates, but it has no way
+to change anything. It tells you what it found, and you approve the fix.
+
+![The menu with correct prices, then the same menu with three prices 100 times too high](.github/before-after.jpg)
+
+## Before you start
+
+**Use a test AWS account, never one that holds real work.** A full run should cost a few cents to a few tens of cents,
+as long as you finish step 7.
+
+You need:
+
+- **AWS sign-in in your terminal,** with administrator rights. Any usual way works: a profile, SSO or access keys.
+- **[uv](https://docs.astral.sh/uv/getting-started/installation/),** which runs `./kopi` and installs its Python packages.
+- **[Terraform](https://developer.hashicorp.com/terraform/install) 1.10 or newer,** which builds the AWS resources.
+  You don't need to know it. `./kopi` runs it for you.
+- **Access to Claude in Amazon Bedrock,** the AWS service that offers Claude, the model the agent runs on. New to it?
+  Anthropic asks for a [use case form](https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html) once per
+  account. Open the [Bedrock console in Sydney](https://ap-southeast-2.console.aws.amazon.com/bedrock/home?region=ap-southeast-2),
+  pick any Claude model in the model catalog, and submit it. Access usually follows straight away.
+
+Step 2 checks your sign-in, Terraform and Claude access before it creates anything, and says what to fix. It runs in
+`ap-southeast-2`, whatever region your terminal uses. macOS is tested. Linux should work, but is untested.
+
+## Run it
+
+Run these in order. **Lost at any point? Run `./kopi`.** It tells you where you are and what to run next.
+
+### 1. Get the code
+
+```
+git clone https://github.com/ntcsteve/safe-ai-agents-aws.git
+cd safe-ai-agents-aws
+```
+
+### 2. Deploy
+
+```
+./kopi up
+```
+
+It shows the AWS account it will use, then Terraform's plan of what it will create. Make sure that is your test
+account, then type `yes`. The plan shows your account ID, so don't share your screen. This takes about 5 minutes.
+
+**Success: `HEALTHY` and a web address.** Open it, on a phone if you can, and leave it open. Every price is correct. You
+can add something to your order, so you can watch the total jump in step 4, but you don't have to.
+
+### 3. Can it touch my data?
+
+```
+./kopi safe
+```
+
+AWS's own permission checker tests each IAM role (a set of permissions) that the agent can reach.
+
+**Success: `BOUNDARY HOLDS`.** Nothing in the agent's path can write. This checks the roles' own policies. It does not
+cover organization-wide policies.
+
+### 4. Break it
+
+```
+./kopi break
+```
+
+This applies a change called `MNT-142`: approved, and wrong.
+
+**Success: `BROKEN`.** Within seconds, the open page updates by itself and shows three prices 100 times too high. A
+clock starts against a 10-minute target, called the tolerance. Going over it only changes that message to `OVER`. In the
+output, a stall just means one menu.
+
+### 5. What did it actually do?
+
+```
+./kopi observe
+```
+
+The agent reports what it found, what it thinks happened, what it could not see, and how it would recover. Then come
+its receipts: a log line written by each tool it used, which the agent cannot edit. So you can check what it did, not
+only what it said.
+
+**Success: `S3 version IDs match before and after, so it changed nothing`.** The menus live in S3, which gives every
+change a new version ID. So this comes from AWS, not from the agent.
+
+### 6. Can I get back?
+
+```
+./kopi recover
+```
+
+It shows the one menu it would restore. Type `ROLL BACK` to approve, or anything else to stop.
+
+**Success: `RECOVERED`.** Kopi Corner's prices are correct again, and Kopi Seduh still has its 20% off promo
+(`PROMO-7`). That proves the restore touched only one menu.
+
+Want to go round again? Run `./kopi reset`, then start from step 4.
+
+### 7. Clean up
+
+**Don't skip this. The demo costs money until you do.**
+
+```
+./kopi down
+```
+
+Type `yes`. This takes 4 to 6 minutes. Keep this folder until it finishes, because `infra/terraform.tfstate` is the only
+record of what to remove.
+
+**Success: `DOWN`.** Run `./kopi` to confirm. It says `NOT DEPLOYED`.
+
+## If you get stuck
+
+Every message names what happened and what to run next, so start there. Then run `./kopi`. These are the exceptions:
+
+| You see | It means | Do this |
+|---|---|---|
+| `uv: No such file or directory` | uv is not installed | Install it, then open a new terminal |
+| `PREFLIGHT FAILED` | Sign-in, Terraform or Claude access is missing. Nothing was created | Follow its `Next:` |
+| `TERRAFORM FAILED` during `down` | Usually a scenario file you edited is not valid JSON | Fix the file, then `./kopi down` |
+
+## What this leaves out
+
+This is a learning demo, not a production pattern. Now that you have seen it, here is what production also needs:
+
+- The agent runs in public network mode, not inside your VPC.
+- Data is not encrypted with your own KMS key.
+- CloudTrail data events are off, so S3 reads are not audited separately.
+- Receipts are matched to tool calls by time and tool name, not by a correlation ID.
+- The menu page is public to anyone with its web address.
+- Your terminal holds write access. The agent never gets those credentials.
+
+**S3 versions alone are not enough either.** `./kopi recover` restores from S3 versions, which is simple and works here.
+But those versions live in the same bucket and the same account as the data. Anyone with delete rights can remove them,
+so this protects you from a bad change, not from a stolen credential or a deleted bucket.
+
+## Go further
+
+The optional [Clumio add-on](addons/clumio/README.md) adds a managed way back, using Backtrack from Clumio, a cloud
+backup service. Backtrack uses the same S3 versions, so it does not solve the problem above. Its daily copy outside
+your account does, and this demo never restores from that copy. For real data, see
+[Get started with Clumio on AWS](https://github.com/ntcsteve/get-started-clumio-aws).
+
+## How it works
+
+AgentCore is the AWS service that runs the agent.
 
 ```
 You (terminal)                        Customers (browser)
@@ -20,203 +169,45 @@ S3 bucket, versioned  ---------------> CloudFront
    | read only
 Lambda (2 tools, each logs a receipt)
    ^
-AgentCore Gateway
+AgentCore Gateway (passes the agent's tool calls to Lambda)
    ^
-AgentCore agent (Claude): investigates, can never write
+AgentCore agent, running Claude: investigates, can never write
 ```
-
-Three promises, each one proven by a command:
-
-| Promise | Means | Proven by |
-|---|---|---|
-| Safe | No role the agent reaches has permission to write | `./kopi safe` |
-| Observable | Every tool call leaves a receipt the agent cannot edit | `./kopi observe` |
-| Recoverable | A person approves a restore of exactly one object | `./kopi recover` |
-
-## What this is not
-
-**A learning demo, not a production pattern. Use a test AWS account.** It leaves out what production needs:
-
-- The agent runs in public network mode, not inside your VPC.
-- Data is not encrypted with your own KMS key.
-- CloudTrail data events are off, so S3 reads are not audited separately.
-- Receipts are matched to tool calls by time and tool name, not by a correlation ID.
-- The menu page is public to anyone with its URL.
-- Terraform's plans show your account ID, so don't share your screen during `./kopi up` or `./kopi down`.
-- Terraform state is a local file. Do not delete `infra/terraform.tfstate` until after `./kopi down`.
-- Your terminal holds write access. The agent never gets those credentials.
-
-## Cost
-
-A full run should cost a few cents to a few tens of cents. As a guide, 32 recorded agent runs plus other
-testing cost under US$4 in October 2026 for AgentCore, Claude and S3 together, not counting CloudFront. Your bill
-may differ, so run `./kopi down` when you finish.
-
-## Prerequisites
-
-- macOS or Linux. Only macOS has been tested. On Windows, use WSL, also untested.
-- A test AWS account, with credentials for an administrator role in your terminal.
-- Access to Claude in Amazon Bedrock in `ap-southeast-2`. `./kopi up` checks this first. Anthropic asks for a use case
-  form once per account: pick a Claude model in the Bedrock console to submit it.
-- [Terraform](https://developer.hashicorp.com/terraform/install) 1.10 or newer.
-- [uv](https://docs.astral.sh/uv/getting-started/installation/), which runs `./kopi` and installs its Python packages.
-
-## Deploy
-
-This takes about 5 minutes.
-
-```
-./kopi up
-```
-
-It checks your setup, then shows the account and region it will use, then Terraform's plan. Check the account,
-then type `yes`. It ends with `HEALTHY` and a URL.
-
-Open the URL, on a phone if you can. Every price is correct. Add something to your order.
-
-## Walk through
-
-**1. Safe: can the agent touch the data?**
-
-```
-./kopi safe
-```
-
-AWS's IAM simulator checks each role the agent reaches. Expect `BOUNDARY HOLDS`.
-
-This proves what the roles' own policies allow. It does not cover organization-wide policies, and it is not a live
-call being refused.
-
-**2. Break it**
-
-```
-./kopi break
-```
-
-A change that was approved, and wrong: three prices go up 100 times. Within seconds the page shows it, and your
-order total jumps. The clock starts against a 10-minute tolerance.
-
-**3. Observable: what happened, and what did the agent do?**
-
-```
-./kopi observe
-```
-
-The agent reports facts, a hypothesis, gaps and a proposed recovery. Then come its receipts, so you can
-check what it did as well as what it said. S3 version IDs, read before and after, prove it changed nothing.
-
-**4. Recoverable: put it right**
-
-```
-./kopi recover
-```
-
-It previews the one object it would restore. Type `ROLL BACK` to approve, or anything else to stop. Expect
-`HEALTHY`, and the promo on the other menu is still there.
-
-To go round again without removing anything, run `./kopi reset`, then start from step 2.
-
-## Clean up
-
-This takes 4 to 6 minutes.
-
-```
-./kopi down
-```
-
-Type `yes`.
-
-## Troubleshooting
-
-Every command names its state and what to do next. `./kopi` shows them at any time.
-
-| You see | It means | Do this |
-|---|---|---|
-| `CONFIG INVALID` | A value in `config.env` is wrong | Fix the value it names |
-| `SCENARIO INVALID` | A scenario file has a mistake | Fix the field it names |
-| `PREFLIGHT FAILED` | A tool, your credentials or model access is missing | Follow its `Next:` |
-| `NOT DEPLOYED` | Nothing is running | `./kopi up` |
-| `CONFIG NOT APPLIED` | You edited a file since the last deploy | `./kopi up` |
-| `REGION CHANGED` | `config.env` names a different region from the stack | `./kopi down`, then `./kopi up` |
-| `NOT NOW` | That command does not fit the current state | Follow its `Next:` |
-| `AGENT UNAVAILABLE` | The model or harness failed | `observe` shows the same evidence without the agent |
-| `RECEIPTS INCOMPLETE` | CloudWatch has not stored them all yet | Check CloudWatch, or `./kopi observe` for a new run |
-| `RECEIPTS MISMATCH` | A tool ran that the agent did not report | Trust the receipts |
-| `AGENT CHANGED DATA` | S3 changed while the agent ran. This should be impossible | `./kopi reset`, then find out what wrote it |
-| `NO GOOD VERSION` | No healthy version in the recent history | `./kopi reset` |
-| `WRONG SCOPE` | More than the one menu is broken | `./kopi reset` |
-| `WRONG SCOPE AFTER RESTORE` | S3 shows another menu changed too | `./kopi reset`, then find out why |
-| `PREVIEW ONLY` | You did not type `ROLL BACK`, so nothing was written | `./kopi recover` |
-| `BOUNDARY BROKEN` | A role can do more than it should | Fix `infra/`, then `./kopi up` |
-| `TERRAFORM FAILED` during `down` | Usually a scenario file that is not valid JSON, which Terraform reads too | Fix the file it names, then `./kopi down` |
-
-## Customize
-
-There is one rule: **edit a file, then run `./kopi up`.** Until you do, other commands refuse and say what
-changed. These files hold everything you would change:
-
-| To change | Edit | Effect |
-|---|---|---|
-| The story: menus, prices, the bad change, the tolerance | `scenario/kopi.json`, or a new file there | `./kopi up` always ends with good menus |
-| Region or model | `config.env` | Region change: `./kopi down` first, then `./kopi up` |
-| The agent's instructions | `infra/investigator-prompt.md` | Then run `./kopi eval` |
-
-Run `./kopi eval` after changing the prompt or the model. It makes three checks, mainly on what AWS shows: nothing
-may change in S3, and an answer about a broken menu must name the real version IDs. Its one wording check is "No
-problem found" on healthy menus.
-
-It cannot prove an answer is honest. It would not catch an agent claiming a fix it never made, though S3 would still
-show that nothing changed.
-
-Only `ap-southeast-2` has been tested. Another region needs AgentCore and a Claude inference profile there.
-A wrong `MODEL` is refused before anything is created.
-
-## Going further
-
-**Why S3 versions alone are not enough.** `./kopi recover` restores from S3 versions, which is simple and works here.
-But those versions live in the same bucket and the same account as the data. Anyone with delete rights can remove
-them, so this protects you from a bad change, not from a stolen credential or a deleted bucket.
-
-Want to try a managed way back? The optional [Clumio add-on](addons/clumio/README.md) adds Backtrack. Backtrack uses
-these same versions, so it does not solve this. Its daily copy outside your account does, and this demo never restores
-from that copy. For real data, see [Get started with Clumio on AWS](https://github.com/ntcsteve/get-started-clumio-aws).
-
-## Project layout
 
 ```
 scenario/kopi.json   the story: menus, the bad change, the good change, the tolerance
 config.env           where it runs: region, model, scenario
 kopi                 the one command
-kiosk/states.py      what is true now, and what each command may do
-kiosk/menu.py        what a correct menu is, and how the bad change breaks it
-kiosk/investigation.py   the agent's two read-only tools, as pure logic
-kiosk/recovery.py    which version to restore, and the scope gate
-kiosk/commands.py    safe, break, observe, recover, eval
-kiosk/s3_store.py, agent_client.py, tool_lambda.py, preflight.py, config.py   the edges
+kiosk/               the logic. states.py is what each command may do, and commands.py is each step
 infra/               AWS, in Terraform. investigator-prompt.md is the agent's instructions
-site/                the menu page. incident.js is its states: LIVE, CHANGED, RESTORED
+site/                the menu page
 addons/clumio/       optional. Everything Clumio. Run ./kopi down before you delete it
 tests/               what ./check runs
 ```
 
-`./check` runs every test and Terraform check. It changes nothing in AWS and needs Node 20 or newer too.
+## Change it
 
-## Glossary
+There is one rule: **edit a file, then run `./kopi up`.** Until you do, other commands refuse and say what changed.
 
-| Word | Means |
-|---|---|
-| stall | One menu, stored as one S3 object |
-| MNT-142 | The bad change: three prices multiplied by 100 |
-| PROMO-7 | A good change on the other stall. The restore must leave it alone |
-| harness | The AgentCore agent. It has two read-only tools and no shell |
-| receipt | A log line the tool writes for each call, outside the agent's reach |
-| tolerance | How long a wrong menu is acceptable: 10 minutes. The clock measures against it |
+| To change | Edit | Then |
+|---|---|---|
+| The story: menus, prices, the bad change, the tolerance | `scenario/kopi.json`, or a new file there | `./kopi up` |
+| The region or model | `config.env` | For a new region, `./kopi down` first. Then `./kopi up` |
+| The agent's instructions | `infra/investigator-prompt.md` | `./kopi up`, then `./kopi eval` |
+
+Only `ap-southeast-2` has been tested. Another region needs AgentCore and a Claude inference profile there.
+
+`./kopi eval` makes three checks, mainly on what AWS shows: nothing may change in S3, and an answer about a broken menu
+must name the real version IDs. It cannot prove an answer is honest. It would not catch an agent claiming a fix it
+never made, though S3 would still show that nothing changed.
+
+`./check` runs every test and Terraform check. It changes nothing in AWS, and it also needs Node 20 or newer.
 
 ## Status and license
 
 Last tested on 1 November 2026 on macOS, in one AWS account, in `ap-southeast-2`, with Terraform 1.15, AWS provider
-6.70.0 and `au.anthropic.claude-sonnet-4-6`. That covered the full walk through, the Clumio add-on's connect and
-rollback, and removal, including after a connect that stopped partway. It has never been tested in a brand-new account.
+6.70.0 and `au.anthropic.claude-sonnet-4-6`. That covered all seven steps, the Clumio add-on's connect and rollback,
+and removal, including after a connect that stopped partway. It has never been tested in a brand-new account.
 
 A blank `CLUMIO_OU_ID` and the `CLUMIO POINT BAD` refusal have only been tested in code.
 

@@ -1,11 +1,10 @@
 # Clumio add-on
 
-Optional. Finish the main [README](../../README.md) first. This adds a second way to recover, using
-[Clumio](https://clumio.com) Backtrack. If you never connected it, delete this folder and the AWS demo still works. If
-you did, run `./kopi down` first, because this folder holds the only record of what to remove.
+Optional. A second way to answer "Can I get back?", using [Clumio](https://clumio.com) Backtrack. Run the main
+[README](../../README.md) first, and stop before its step 7, because this needs the demo running.
 
-**Allow for a wait.** Backtrack rolls back to a sync. In our tests the first sync ran within 5 minutes of connecting,
-but allow up to a day.
+Not using it? Delete this folder and the AWS demo still works. If you have connected it, run `./kopi down` first,
+because this folder holds the only record of what to remove.
 
 ## What it adds
 
@@ -16,25 +15,31 @@ but allow up to a day.
 | Scale | One object, in this code | One object here. Clumio can roll back a prefix or a bucket |
 | Record | A line in the demo's log | A Clumio task, with its start and end times |
 
-**Be clear about what this does not show.** Backtrack uses the same versions as `./kopi recover`, so it does not
-protect you if someone deletes them. The policy here also keeps a daily SecureVault copy, in Clumio's air-gapped,
-immutable storage, and that is what survives a stolen credential. This demo never restores from it.
+**What this does not show.** Backtrack uses the same versions as `./kopi recover`, so it does not protect you if someone
+deletes them. The policy here also keeps a daily SecureVault copy, in Clumio's air-gapped, immutable storage, and that
+is what survives a stolen credential. This demo never restores from it.
 
-## You need
+## Before you start
 
-- The AWS demo running: `./kopi` says `HEALTHY`.
-- A Clumio account. No account yet? See [Get started with Clumio on AWS](https://github.com/ntcsteve/get-started-clumio-aws#choose-your-path).
+- **Use a test account.** Connecting creates IAM roles that let Clumio read, write and delete objects in every S3 bucket
+  in the account, not only the menus bucket. A rollback needs write access. So "only you can write" in the main README
+  stops being true once this add-on is connected.
+- **Allow for a wait.** Backtrack rolls back to a sync. In our tests the first sync ran within 5 minutes of connecting,
+  but allow up to a day.
+- **Clumio bills for what it protects.** Run `./kopi down` when you finish. SecureVault copies stay until their 30-day
+  retention ends, so check how your Clumio plan bills them.
+
+You need:
+
+- The AWS demo running: `./kopi` says `HEALTHY`. If you just finished step 6 of the main README, it already does.
+- A Clumio account. No account yet? See [Get started with Clumio on AWS](https://github.com/ntcsteve/get-started-clumio-aws#choose-your-path),
+  or skip this add-on, because the main demo is complete without it.
 - An API token, from the Clumio console under Administration, Access management, API tokens.
 - Your API URL, which depends on your portal. See the [table of URLs](https://github.com/ntcsteve/get-started-clumio-aws#before-you-begin).
 
-**Use a test account.** Connecting creates IAM roles that let Clumio read, write and delete objects in every S3 bucket
-in the account, not only the menus bucket. A rollback needs write access. So "only you can write" in the main README
-stops being true once this add-on is connected.
+## Run it
 
-Clumio bills for what it protects. Run `./kopi down` when you finish. SecureVault copies stay until their 30-day
-retention ends, so check how your Clumio plan bills them.
-
-## Set it up
+### 1. Add your settings
 
 There is one file to edit, and it is gitignored:
 
@@ -48,25 +53,32 @@ cp addons/clumio/clumio.env.example addons/clumio/clumio.env
 | `CLUMIO_API_BASE_URL` | Your portal's API URL |
 | `CLUMIO_OU_ID` | Optional. Leave blank unless your tenant uses organizational units |
 
-Values are read as plain text, so `$(...)` is not run. Any other key is refused, so this file can never change which
-AWS account a run uses. Do not use shell exports or
-a `terraform.tfvars`: `./kopi` reads this file and nothing else.
+Paste plain values, because `$(...)` is not run. Any other key is refused, so this file can never change which AWS
+account a run uses. Shell exports and `terraform.tfvars` are ignored: `./kopi` reads this file and nothing else.
 
-## Run it
-
-**1. Connect**
+### 2. Connect
 
 ```
 ./kopi clumio
 ```
 
 Terraform shows its plan and asks you to type `yes`, twice on a first connect. The first adds the connection and
-Clumio's IAM roles. Then it waits for Clumio to discover the bucket, then adds the protection.
+Clumio's IAM roles. Then it waits for Clumio to discover the bucket, and the second adds the protection.
 
-**2. Wait for the first sync.** Run `./kopi` to check. Leave the menus `HEALTHY` until it says `Clumio: ready`, because
-a sync taken while a menu is broken captures the bad change.
+**Success: `Clumio is connected and protects the menus bucket`.**
 
-**3. Break it and roll it back**
+### 3. Wait for the first sync
+
+```
+./kopi
+```
+
+Run this now and then. Don't run `./kopi break` until it says ready, because a sync taken while a menu is broken
+captures the bad change.
+
+**Success: `Clumio: ready`.**
+
+### 4. Break it and roll it back
 
 ```
 ./kopi break
@@ -74,30 +86,34 @@ a sync taken while a menu is broken captures the bad change.
 ./kopi recover --clumio
 ```
 
-It previews the one object, then asks for `ROLL BACK`. Clumio took about 2 minutes in our test.
+It shows the one menu it would restore. Type `ROLL BACK` to approve, or anything else to stop. Clumio took about
+2 minutes in our test.
 
-**4. Remove it**
+**Success: `RECOVERED`.** Open the task it names in the Clumio console to see the record.
+
+### 5. Clean up
+
+**Don't skip this. The demo and the protection cost money until you do.**
 
 ```
 ./kopi down
 ```
 
-It removes the protection, the connection and Clumio's IAM roles first, then the demo. Type `yes` at both prompts.
-In our test this took about 6 minutes. SecureVault copies stay until their 30-day retention ends.
+It removes the protection, the connection and Clumio's IAM roles first, then the demo. Type `yes` at both prompts. This
+took about 6 minutes in our test.
 
-## If something goes wrong
+**Success: `DOWN`.**
+
+## If you get stuck
+
+Every message names what happened and what to run next, and `./kopi` shows where you are. These need a little more:
 
 | You see | It means | Do this |
 |---|---|---|
-| `CLUMIO NOT SET UP` | `clumio.env` is missing or wrong, or the bucket is not connected | Follow its `Next:` |
 | `CLUMIO API FAILED` | The token or URL was refused | Check `clumio.env` |
 | `CLUMIO BUCKET NOT SEEN` | Clumio has not discovered the bucket yet. Nothing is broken | `./kopi clumio` again later |
-| `CLUMIO NO SYNC` | No sync has run yet | Wait, or use `./kopi recover` |
 | `CLUMIO POINT BAD` | The last sync captured the bad change | `./kopi recover` |
-| `WRONG SCOPE` | The preview is not exactly the one object | Stop. Nothing was rolled back |
-| `PREVIEW ONLY` | You did not type `ROLL BACK` | `./kopi recover --clumio` |
-| `CLUMIO TASK FAILED` | The rollback failed or timed out | Open the task in the Clumio console. Do not submit it again |
-| `CLUMIO DISCONNECT FAILED` | Clumio or Terraform stopped the removal, and the demo was left running | Read the error. If your tenant refuses, ask your Clumio admin. Then `./kopi down` |
+| `CLUMIO DISCONNECT FAILED` | Clumio or Terraform stopped the removal, and the demo is still running | Read the error, then `./kopi down`. If your tenant refuses, ask your Clumio admin |
 
 ## Going further
 
