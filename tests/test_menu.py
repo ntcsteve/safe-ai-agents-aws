@@ -139,7 +139,7 @@ class Check(unittest.TestCase):
     def test_seed_without_promo_names_the_missing_change(self):
         result = menu.check_menus(menu.seed_menus(self.scenario), self.scenario)
         self.assertEqual(result.state, "BROKEN")
-        self.assertEqual(result.problems, ["seduh/kopi-flight is 45000, expected 36000 (PROMO-7 not applied)"])
+        self.assertEqual(result.problems, ["seduh/kopi-flight is Rp 45.000, expected Rp 36.000 (PROMO-7 not applied)"])
 
     def test_fault_breaks_exactly_three_items(self):
         faulted = menu.apply_fault(expected_menus(self.scenario), self.scenario)
@@ -148,9 +148,9 @@ class Check(unittest.TestCase):
         self.assertEqual(
             result.problems,
             [
-                "kopi/kopi-susu is 2500000, expected 25000",
-                "kopi/kopi-hitam is 1800000, expected 18000",
-                "kopi/es-kopi-gula-aren is 2800000, expected 28000",
+                "kopi/kopi-susu is Rp 2.500.000, expected Rp 25.000",
+                "kopi/kopi-hitam is Rp 1.800.000, expected Rp 18.000",
+                "kopi/es-kopi-gula-aren is Rp 2.800.000, expected Rp 28.000",
             ],
         )
 

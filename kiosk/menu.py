@@ -182,7 +182,8 @@ def _stall_problems(stall_id, current, expected, scenario):
             problems.append(f"{stall_id}/{item_id} is missing")
         elif actual[item_id] != want:
             note = _promo_note(stall_id, item_id, actual[item_id], scenario)
-            problems.append(f"{stall_id}/{item_id} is {actual[item_id]}, expected {want}{note}")
+            shown, wanted = (format_price(price, scenario["currency"]) for price in (actual[item_id], want))
+            problems.append(f"{stall_id}/{item_id} is {shown}, expected {wanted}{note}")
     problems += [f"{stall_id}/{item_id} is not on the expected menu" for item_id in actual if item_id not in expected]
     return problems
 
