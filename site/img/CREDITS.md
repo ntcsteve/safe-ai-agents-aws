@@ -17,3 +17,5 @@ Cropped and recompressed for the phone page (metadata removed).
 | kopi-flight.jpg | https://unsplash.com/photos/coffee-and-juice-flight-with-plantain-chips-0Crpyko1z5Y |
 
 Font: Young Serif, SIL Open Font License 1.1 (see `site/fonts/OFL.txt`).
+
+`.github/before-after.jpg` is a screenshot of this menu page, so it shows the same photos.
