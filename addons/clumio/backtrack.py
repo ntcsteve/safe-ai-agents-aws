@@ -191,7 +191,10 @@ def require_single_key(objects, key):
     """The one previewed object, or ClumioRefused naming what the preview actually holds."""
     keys = [o.get("object_key") for o in objects]
     if keys != [key]:
-        raise ClumioRefused(f"WRONG SCOPE: the preview lists {keys}, expected only {key}. Nothing rolled back.")
+        raise ClumioRefused(
+            f"WRONG SCOPE: the preview lists {keys}, expected only {key}. "
+            "Nothing rolled back. Next: ./kopi recover uses S3 versions"
+        )
     return objects[0]
 
 

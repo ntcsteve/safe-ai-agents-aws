@@ -149,7 +149,7 @@ def apply_fault(menus, scenario):
         if item["price"] != expected[item["id"]]:
             raise ChangeRefused(
                 f"{fault['change_id']} refused: {item['id']} is {item['price']}, "
-                f"expected {expected[item['id']]} before the change. Run reset first."
+                f"expected {expected[item['id']]} before the change"
             )
     for item in targets:
         item["price"] *= fault["factor"]
@@ -236,7 +236,7 @@ def _find_item(stall_menu, item_id):
     for item in stall_menu["items"]:
         if item["id"] == item_id:
             return item
-    raise ChangeRefused(f"{stall_menu['stall']}/{item_id} is missing. Run reset first.")
+    raise ChangeRefused(f"{stall_menu['stall']}/{item_id} is missing")
 
 
 def _item_ids(stall):

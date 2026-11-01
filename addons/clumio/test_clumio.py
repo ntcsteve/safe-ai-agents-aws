@@ -95,6 +95,12 @@ class ScopeGate(unittest.TestCase):
                 backtrack.require_single_key(objects, KEY)
 
 
+class ScopeGateNextStep(unittest.TestCase):
+    def test_a_wrong_preview_points_at_the_other_way_back(self):
+        with self.assertRaisesRegex(backtrack.ClumioRefused, "Next: ./kopi recover uses S3 versions"):
+            backtrack.require_single_key([], KEY)
+
+
 class FakeClumio:
     """Clumio's API: the sync it reports, the version it previews, and a rollback that rewrites the bucket."""
 

@@ -193,7 +193,7 @@ class Fault(unittest.TestCase):
 
     def test_fault_twice_is_refused(self):
         once = menu.apply_fault(expected_menus(self.scenario), self.scenario)
-        with self.assertRaisesRegex(menu.ChangeRefused, "MNT-142 refused: kopi-susu is 2500000, expected 25000.*reset"):
+        with self.assertRaisesRegex(menu.ChangeRefused, "MNT-142 refused: kopi-susu is 2500000, expected 25000"):
             menu.apply_fault(once, self.scenario)
 
 

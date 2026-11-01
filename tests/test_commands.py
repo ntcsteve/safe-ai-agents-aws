@@ -241,6 +241,21 @@ class Gate(unittest.TestCase):
         self.assertIn("Next: ./kopi break", printed)
         observe.assert_not_called()
 
+    def test_a_refused_scenario_or_change_names_a_next_step(self):
+        for error, expected in (
+            (KOPI.menu.ScenarioError("stalls is empty"), "Next: fix it in scenario/, then ./kopi up"),
+            (KOPI.menu.ChangeRefused("kopi/kopi-susu is missing"), "Next: ./kopi reset"),
+        ):
+            with (
+                self.subTest(error=error),
+                mock.patch.object(KOPI, "_load_config", return_value=SETTINGS),
+                mock.patch.object(KOPI.Demo, "state", return_value=states.State.HEALTHY),
+                mock.patch.dict(KOPI.COMMANDS, {"break": mock.Mock(side_effect=error)}),
+            ):
+                result, printed = quietly(KOPI.main, ["kopi", "break"])
+                self.assertEqual(result, 2)
+                self.assertIn(expected, printed)
+
     def test_the_table_and_the_commands_match_exactly(self):
         self.assertEqual(set(KOPI.COMMANDS), set(states.ALLOWED))
 

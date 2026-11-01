@@ -270,9 +270,9 @@ def main(argv):
     except config.ConfigInvalid as error:
         print(f"CONFIG INVALID: {error}. Next: fix config.env")
     except menu.ScenarioError as error:
-        print(f"SCENARIO INVALID: {error}")
+        print(f"SCENARIO INVALID: {error}. Next: fix it in scenario/, then ./kopi up")
     except menu.ChangeRefused as error:
-        print(f"REFUSED: {error}")
+        print(f"REFUSED: {error}. Next: ./kopi reset")
     except recovery.RecoveryRefused as error:
         print(error)
     except preflight.PreflightFailed as error:
