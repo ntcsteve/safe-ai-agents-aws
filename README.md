@@ -6,6 +6,8 @@ put it right with one approved restore. Then you remove it all.
 
 **Lost at any point? Run `./kopi`. It tells you where you are and what to run next.**
 
+## Architecture
+
 ```
 You (terminal)                        Customers (browser)
    |                                        ^
@@ -31,10 +33,9 @@ Three promises, each one proven by a command:
 | Observable | Every tool call leaves a receipt the agent cannot edit | `./kopi observe` |
 | Recoverable | A person approves a restore of exactly one object | `./kopi recover` |
 
-## Before you start
+## What this is not
 
-**This is a learning demo, not a production pattern. Use a test AWS account.** It leaves out what
-production needs:
+**A learning demo, not a production pattern. Use a test AWS account.** It leaves out what production needs:
 
 - The agent runs in public network mode, not inside your VPC.
 - Data is not encrypted with your own KMS key.
@@ -45,11 +46,13 @@ production needs:
 - Terraform state is a local file. Do not delete `infra/terraform.tfstate` until after `./kopi down`.
 - Your terminal holds write access. The agent never gets those credentials.
 
-**Cost.** A full run should cost a few cents to a few tens of cents. As a guide, 32 recorded agent runs plus other
+## Cost
+
+A full run should cost a few cents to a few tens of cents. As a guide, 32 recorded agent runs plus other
 testing cost under US$4 in October 2026 for AgentCore, Claude and S3 together, not counting CloudFront. Your bill
 may differ, so run `./kopi down` when you finish.
 
-**You need:**
+## Prerequisites
 
 - macOS or Linux. Only macOS has been tested. On Windows, use WSL, also untested.
 - A test AWS account, with credentials for an administrator role in your terminal.
@@ -57,9 +60,9 @@ may differ, so run `./kopi down` when you finish.
 - [Terraform](https://developer.hashicorp.com/terraform/install) 1.10 or newer.
 - [uv](https://docs.astral.sh/uv/getting-started/installation/), which runs `./kopi` and installs its Python packages.
 
-## Run it
+## Deploy
 
-**1. Deploy** (about 5 minutes)
+This takes about 5 minutes.
 
 ```
 ./kopi up
@@ -70,7 +73,9 @@ then type `yes`. It ends with `HEALTHY` and a URL.
 
 Open the URL, on a phone if you can. Every price is correct. Add something to your order.
 
-**2. Safe: can the agent touch the data?**
+## Walk through
+
+**1. Safe: can the agent touch the data?**
 
 ```
 ./kopi safe
@@ -81,7 +86,7 @@ AWS's IAM simulator checks each role the agent reaches. Expect `BOUNDARY HOLDS`.
 This proves what the roles' own policies allow. It does not cover organization-wide policies, and it is not a live
 call being refused.
 
-**3. Break it**
+**2. Break it**
 
 ```
 ./kopi break
@@ -90,7 +95,7 @@ call being refused.
 A change that was approved, and wrong: three prices go up 100 times. Within seconds the page shows it, and your
 order total jumps. The clock starts against a 10-minute tolerance.
 
-**4. Observable: what happened, and what did the agent do?**
+**3. Observable: what happened, and what did the agent do?**
 
 ```
 ./kopi observe
@@ -99,7 +104,7 @@ order total jumps. The clock starts against a 10-minute tolerance.
 The agent reports facts, a hypothesis, gaps and a proposed recovery. Then come its receipts, so you can
 check what it did as well as what it said. S3 version IDs, read before and after, prove it changed nothing.
 
-**5. Recoverable: put it right**
+**4. Recoverable: put it right**
 
 ```
 ./kopi recover
@@ -108,15 +113,19 @@ check what it did as well as what it said. S3 version IDs, read before and after
 It previews the one object it would restore. Type `ROLL BACK` to approve, or anything else to stop. Expect
 `HEALTHY`, and the promo on the other menu is still there.
 
-**6. Remove everything** (4 to 6 minutes)
+To go round again without removing anything, run `./kopi reset`, then start from step 2.
+
+## Clean up
+
+This takes 4 to 6 minutes.
 
 ```
 ./kopi down
 ```
 
-Type `yes`. To go round again without removing anything, run `./kopi reset`, then start from step 3.
+Type `yes`.
 
-## If something goes wrong
+## Troubleshooting
 
 Every command names its state and what to do next. `./kopi` shows them at any time.
 
@@ -140,7 +149,7 @@ Every command names its state and what to do next. `./kopi` shows them at any ti
 | `BOUNDARY BROKEN` | A role can do more than it should | Fix `infra/`, then `./kopi up` |
 | `TERRAFORM FAILED` during `down` | Usually a scenario file that is not valid JSON, which Terraform reads too | Fix the file it names, then `./kopi down` |
 
-## Make it yours
+## Customize
 
 There is one rule: **edit a file, then run `./kopi up`.** Until you do, other commands refuse and say what
 changed. These files hold everything you would change:
@@ -161,16 +170,16 @@ show that nothing changed.
 Only `ap-southeast-2` has been tested. Another region needs AgentCore and a Claude inference profile there.
 A wrong `MODEL` is refused before anything is created.
 
-## Why S3 versions alone are not enough
+## Going further
 
-`./kopi recover` restores from S3 versions, which is simple and works here. But those versions live in the
+**Why S3 versions alone are not enough.** `./kopi recover` restores from S3 versions, which is simple and works here. But those versions live in the
 same bucket and the same account as the data. Anyone with delete rights can remove them, so this protects
 you from a bad change, not from a stolen credential or a deleted bucket.
 
 Want to try a managed way back? The optional [Clumio add-on](addons/clumio/README.md) adds Backtrack, with a daily
 copy outside your account. For real data, see [Get started with Clumio on AWS](https://github.com/ntcsteve/get-started-clumio-aws).
 
-## How it is built
+## Project layout
 
 ```
 scenario/kopi.json   the story: menus, the bad change, the good change, the tolerance
@@ -190,7 +199,7 @@ tests/               what ./check runs
 
 `./check` runs every test and Terraform check. It changes nothing in AWS and needs Node 20 or newer too.
 
-## Words used here
+## Glossary
 
 | Word | Means |
 |---|---|
@@ -201,7 +210,7 @@ tests/               what ./check runs
 | receipt | A log line the tool writes for each call, outside the agent's reach |
 | tolerance | How long a wrong menu is acceptable: 10 minutes. The clock measures against it |
 
-## Status
+## Status and license
 
 The AWS demo was tested on 31 October 2026 on macOS, in one AWS account, in `ap-southeast-2`, with Terraform 1.15,
 AWS provider 6.70.0 and `au.anthropic.claude-sonnet-4-6`. It has never been tested in a brand-new account.
