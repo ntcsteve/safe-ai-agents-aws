@@ -210,7 +210,7 @@ def cmd_recover(demo):
         print(f"  {name}: {shown} -> {menu.format_price(restored, currency)}")
     print("Every other menu stays as it is.")
     before = demo.store.current_versions(demo.scenario)
-    if _typed_answer("Approve the restore? Type ROLL BACK: ") != "ROLL BACK":
+    if typed_answer("Approve the restore? Type ROLL BACK: ") != "ROLL BACK":
         print("PREVIEW ONLY: nothing written. Next: ./kopi recover")
         return 1
     demo.restore(key, chosen)
@@ -224,7 +224,7 @@ def cmd_recover(demo):
         print(f"RECOVERED: {key} restored.")
         teach(
             f"you approved it, and S3 shows only {key} changed.",
-            f"{_promo_line(demo.scenario)}: the fix was the size of the mistake.",
+            f"{promo_line(demo.scenario)}: the fix was the size of the mistake.",
             "./kopi reset to run it again, or ./kopi down to finish, because this stack costs money",
         )
     return code
@@ -320,7 +320,7 @@ def is_read_only(run):
 # --- Helpers ----------------------------------------------------------------------------------
 
 
-def _typed_answer(prompt):
+def typed_answer(prompt):
     try:
         return input(prompt)
     except EOFError:  # no terminal to answer from: not an approval
@@ -328,7 +328,7 @@ def _typed_answer(prompt):
         return ""
 
 
-def _promo_line(scenario):
+def promo_line(scenario):
     promo = scenario["promo"]
     item = next(i for i in scenario["stalls"][promo["stall"]]["items"] if i["id"] == promo["item"])
     return f"{item['name']} is still {promo['label']}"

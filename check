@@ -9,12 +9,18 @@ uvx -q ruff check .
 uvx -q ruff format --check . | tail -1
 echo "== Python tests"
 uv run -q --python 3.13 --with boto3 python -m unittest discover -s tests -t . 2>&1 | tail -1
+if [ -d addons/clumio ]; then uv run -q --python 3.13 --with boto3 python -m unittest addons.clumio.test_clumio 2>&1 | tail -1; fi
 echo "== JS tests"
 node --test tests/*.test.mjs 2>&1 | grep -E '^ℹ (pass|fail)'
 echo "== Terraform fmt"
 terraform fmt -check -recursive infra
+if [ -d addons/clumio ]; then terraform fmt -check -recursive addons/clumio; fi
 echo "formatted"
 echo "== Terraform valid"
 terraform -chdir=infra init -backend=false -input=false -lockfile=readonly >/dev/null
 terraform -chdir=infra validate -no-color | head -1
+if [ -d addons/clumio ]; then
+  terraform -chdir=addons/clumio init -backend=false -input=false -lockfile=readonly >/dev/null
+  terraform -chdir=addons/clumio validate -no-color | head -1
+fi
 echo "GREEN"

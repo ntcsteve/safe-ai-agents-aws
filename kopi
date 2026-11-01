@@ -10,10 +10,11 @@
 ./kopi safe      prove nothing in the agent's path can write
 ./kopi break     apply the bad change
 ./kopi observe   the agent investigates, then its receipts
-./kopi recover   preview, type ROLL BACK, restore the one bad menu
+./kopi recover   preview, type ROLL BACK, restore the one bad menu. Add --clumio to use Clumio
 ./kopi check     HEALTHY or BROKEN (exit 0 or 1)
 ./kopi reset     good menus, the promo live
 ./kopi down      remove everything
+./kopi clumio    optional: connect Clumio. See addons/clumio/README.md
 ./kopi eval      three scripted agent checks, for prompt or model changes
 """
 
@@ -43,9 +44,10 @@ class NotDeployed(RuntimeError):
 class Demo:
     """What every command gets: the config, the scenario, the deployed outputs, and the menu operations."""
 
-    def __init__(self, settings, scenario):
+    def __init__(self, settings, scenario, args=()):
         self.settings = settings
         self.scenario = scenario
+        self.args = args
 
     @functools.cached_property
     def deployed(self):
@@ -106,13 +108,12 @@ class Demo:
         return self.check()
 
     def restore(self, key, version):
-        version_id = self.store.write_menu(key, version["menu"])
+        self.log_restore(key, self.store.write_menu(key, version["menu"]), version["version_id"])
+
+    def log_restore(self, key, version_id, source):
         fault = self.scenario["fault"]
         log = self.store.read_log()
-        change = {
-            "change_id": recovery.restore_id(fault["change_id"]),
-            "title": f"Restored from {version['version_id']}",
-        }
+        change = {"change_id": recovery.restore_id(fault["change_id"]), "title": f"Restored from {source}"}
         log["changes"].append(_log_entry(change, key, version_id))
         self.store.write_log(log)
 
@@ -144,6 +145,9 @@ def cmd_down():
     With no outputs it still destroys from config.env: a partial apply can leave resources behind."""
     live = read_deployed()
     settings = config.Config(live["region"], live["model"], live["scenario"]) if live else _load_config()
+    addon = clumio_addon()
+    if addon and addon.is_active():  # first: deleting a protected bucket would orphan its protection
+        addon.disconnect()
     _terraform("destroy", *settings.terraform_vars())
     removed = commands.delete_agent_logs(settings.region)
     print(f"DOWN: everything is deleted, including {removed} agent log group(s) Terraform did not create.")
@@ -158,16 +162,29 @@ def cmd_status(demo):
         print(f"State: {state}")
     if demo.deployed:
         print(f"Page:  {demo.deployed['url']}")
+        addon = clumio_addon()
+        line = addon.status_line(demo.deployed["bucket"]) if addon else None
+        if line:
+            print(line)
     print(f"Next:  {states.NEXT[state]}")
+
+
+def cmd_clumio(demo):
+    return _require_clumio().connect(demo)
+
+
+def cmd_recover(demo):
+    return _require_clumio().recover(demo) if "--clumio" in demo.args else commands.cmd_recover(demo)
 
 
 COMMANDS = {
     "status": cmd_status,
     "up": cmd_up,
+    "clumio": cmd_clumio,
     "safe": commands.cmd_safe,
     "break": commands.cmd_break,
     "observe": commands.cmd_observe,
-    "recover": commands.cmd_recover,
+    "recover": cmd_recover,
     "check": lambda demo: demo.check(),
     "reset": lambda demo: demo.reset(),
     "eval": commands.cmd_eval,
@@ -183,6 +200,24 @@ def _log_entry(change, key, version_id):
         "applied_at": datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds"),
         "approved_by": "the operator",
     }
+
+
+def clumio_addon():
+    """The add-on, or None if its folder is gone: the AWS demo never depends on it."""
+    try:
+        from addons.clumio import backtrack
+    except ModuleNotFoundError:
+        return None
+    return backtrack
+
+
+def _require_clumio():
+    addon = clumio_addon()
+    if addon is None:
+        raise recovery.RecoveryRefused(
+            "CLUMIO NOT SET UP: addons/clumio is missing. Next: ./kopi recover uses S3 versions"
+        )
+    return addon
 
 
 def read_deployed():
@@ -223,7 +258,7 @@ def main(argv):
         if name == "down":
             return cmd_down() or 0
         settings = _load_config()
-        demo = Demo(settings, _load_scenario(settings.scenario))
+        demo = Demo(settings, _load_scenario(settings.scenario), argv[2:])
         state = demo.state()
         if state not in states.ALLOWED[name]:
             print(demo.refusal_for(name, state))

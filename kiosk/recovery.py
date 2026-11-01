@@ -85,6 +85,10 @@ def seconds_since(log, change_id, now):
     return int((ended - started).total_seconds())
 
 
+def is_good(version, stall_id, scenario):
+    return _version_label(version, stall_id, scenario) == "GOOD"
+
+
 def _version_label(version, stall_id, scenario):
     if version["menu"] is None:
         return "DELETED"

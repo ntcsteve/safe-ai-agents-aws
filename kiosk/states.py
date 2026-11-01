@@ -21,6 +21,7 @@ ALLOWED = {
     "status": set(State),
     # Not "down": it runs before this table, because the way out must never be blocked.
     "up": set(State) - {State.REGION_CHANGED},
+    "clumio": {State.HEALTHY},  # never while broken: a sync taken now would capture the bad change
     "safe": RUNNING,
     "break": {State.HEALTHY},
     "observe": {State.BROKEN},

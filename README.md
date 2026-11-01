@@ -164,7 +164,8 @@ A wrong `MODEL` is refused before anything is created.
 same bucket and the same account as the data. Anyone with delete rights can remove them, so this protects
 you from a bad change, not from a stolen credential or a deleted bucket.
 
-For a copy outside the account, see [Get started with Clumio on AWS](https://github.com/ntcsteve/get-started-clumio-aws).
+Want to try a managed way back? The optional [Clumio add-on](addons/clumio/README.md) adds Backtrack, with a daily
+copy outside your account. For real data, see [Get started with Clumio on AWS](https://github.com/ntcsteve/get-started-clumio-aws).
 
 ## How it is built
 
@@ -180,6 +181,7 @@ kiosk/commands.py    safe, break, observe, recover, eval
 kiosk/s3_store.py, agent_client.py, tool_lambda.py, preflight.py, config.py   the edges
 infra/               AWS, in Terraform. investigator-prompt.md is the agent's instructions
 site/                the menu page. incident.js is its states: LIVE, CHANGED, RESTORED
+addons/clumio/       optional. Everything Clumio. Delete it and the demo still works
 tests/               what ./check runs
 ```
 
